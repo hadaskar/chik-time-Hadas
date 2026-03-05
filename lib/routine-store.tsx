@@ -1,7 +1,12 @@
 "use client"
 
 import React, { createContext, useContext, useReducer, useCallback, type ReactNode } from "react"
+import { createBrowserClient } from '@supabase/ssr'
 
+const supabase = createBrowserClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 // --- Types ---
 export interface RoutineTask {
   id: string
@@ -146,8 +151,57 @@ interface RoutineContextType {
 
 const RoutineContext = createContext<RoutineContextType | null>(null)
 
+// export function RoutineProvider({ children }: { children: ReactNode }) {
+//   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
+
+//   const enabledTasks = state.tasks.filter((t) => t.enabled)
+//   const totalDuration = enabledTasks.reduce((sum, t) => sum + t.duration, 0)
+
+//   return (
+//     <RoutineContext.Provider value={{ state, dispatch, enabledTasks, totalDuration }}>
+//       {children}
+//     </RoutineContext.Provider>
+//   )
+// }
 export function RoutineProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
+  const [state, rawDispatch] = useReducer(reducer, INITIAL_STATE)
+
+  // זו הפונקציה שתחסוך לך קוד בכל הפרויקט!
+  // בכל פעם שתעשי dispatch, זה גם יעדכן את המסך וגם ישמור בשרת אוטומטית.
+  const dispatch = useCallback(async (action: Action) => {
+    // 1. עדכון מיידי של המסך (שיהיה מהיר למשתמש)
+    rawDispatch(action);
+
+    // 2. עדכון השרת (Supabase) בשקט ברקע
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return; // אם המשתמש לא מחובר, אין מה לשמור
+
+    switch (action.type) {
+      case "ADD_TASK":
+        await supabase.from('tasks').insert({
+          id: action.payload.id,
+          user_id: user.id,
+          title: action.payload.name,
+          duration_minutes: action.payload.duration,
+          enabled: action.payload.enabled,
+          icon: action.payload.icon
+        });
+        break;
+
+      case "TOGGLE_TASK":
+        const task = state.tasks.find(t => t.id === action.payload);
+        await supabase.from('tasks')
+          .update({ enabled: !task?.enabled })
+          .eq('id', action.payload);
+        break;
+
+      case "REMOVE_TASK":
+        await supabase.from('tasks').delete().eq('id', action.payload);
+        break;
+        
+      // אפשר להוסיף כאן עוד מקרים בהמשך...
+    }
+  }, [state.tasks]);
 
   const enabledTasks = state.tasks.filter((t) => t.enabled)
   const totalDuration = enabledTasks.reduce((sum, t) => sum + t.duration, 0)
