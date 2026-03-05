@@ -1,28 +1,27 @@
 "use client"
 
-import React, { createContext, useContext, useReducer, useCallback, type ReactNode } from "react"
-import { createBrowserClient } from '@supabase/ssr'
+import React, { createContext, useContext, useReducer, useCallback, useEffect, type ReactNode } from "react"
+// ודאי שהנתיב ל-lib/supabase נכון (אם הקובץ בתוך hooks, אולי צריך ../lib/supabase)
+import { supabase } from "@/lib/supabase" 
 
-const supabase = createBrowserClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
 // --- Types ---
+
+// 1. הוספנו export כדי למנוע את השגיאה בדפים אחרים
+export interface NotificationSettings {
+  enabled: boolean
+  sound: string
+  reminderBefore: number
+}
+
 export interface RoutineTask {
   id: string
   name: string
   icon: string
-  duration: number // in minutes
+  duration: number
   enabled: boolean
 }
 
 export type AppView = "onboarding" | "dashboard" | "tasks" | "settings"
-
-export interface NotificationSettings {
-  enabled: boolean
-  sound: "gentle-chime" | "soft-bell" | "morning-bird" | "ocean-wave"
-  reminderBefore: number // seconds before task ends
-}
 
 export interface AppState {
   view: AppView
@@ -31,7 +30,7 @@ export interface AppState {
   activeTaskIndex: number
   isTimerRunning: boolean
   elapsedSeconds: number
-  notifications: NotificationSettings
+  notifications: NotificationSettings // משתמש ב-Interface שהגדרנו למעלה
   wakeUpTime: string
 }
 
@@ -39,12 +38,6 @@ export interface AppState {
 export const DEFAULT_TASKS: RoutineTask[] = [
   { id: "1", name: "Brush Teeth", icon: "sparkles", duration: 5, enabled: true },
   { id: "2", name: "Shower", icon: "droplets", duration: 10, enabled: true },
-  { id: "3", name: "Get Dressed", icon: "shirt", duration: 5, enabled: true },
-  { id: "4", name: "Make Breakfast", icon: "coffee", duration: 15, enabled: true },
-  { id: "5", name: "Meditate", icon: "brain", duration: 10, enabled: false },
-  { id: "6", name: "Exercise", icon: "dumbbell", duration: 20, enabled: false },
-  { id: "7", name: "Journal", icon: "book-open", duration: 10, enabled: false },
-  { id: "8", name: "Read News", icon: "newspaper", duration: 10, enabled: false },
 ]
 
 const INITIAL_STATE: AppState = {
@@ -54,135 +47,87 @@ const INITIAL_STATE: AppState = {
   activeTaskIndex: 0,
   isTimerRunning: false,
   elapsedSeconds: 0,
-  notifications: {
-    enabled: true,
-    sound: "gentle-chime",
-    reminderBefore: 30,
-  },
+  notifications: { enabled: true, sound: "gentle-chime", reminderBefore: 30 },
   wakeUpTime: "07:00",
 }
 
-// --- Actions ---
-type Action =
-  | { type: "SET_VIEW"; payload: AppView }
-  | { type: "COMPLETE_ONBOARDING" }
-  | { type: "TOGGLE_TASK"; payload: string }
-  | { type: "UPDATE_TASK_DURATION"; payload: { id: string; duration: number } }
-  | { type: "ADD_TASK"; payload: RoutineTask }
-  | { type: "REMOVE_TASK"; payload: string }
-  | { type: "REORDER_TASKS"; payload: RoutineTask[] }
-  | { type: "START_TIMER" }
-  | { type: "PAUSE_TIMER" }
-  | { type: "RESET_TIMER" }
-  | { type: "TICK" }
-  | { type: "NEXT_TASK" }
-  | { type: "UPDATE_NOTIFICATIONS"; payload: Partial<NotificationSettings> }
-  | { type: "SET_WAKE_UP_TIME"; payload: string }
-  | { type: "UPDATE_TASK_NAME"; payload: { id: string; name: string } }
-
-function reducer(state: AppState, action: Action): AppState {
+// --- Reducer ---
+function reducer(state: AppState, action: any): AppState {
   switch (action.type) {
-    case "SET_VIEW":
-      return { ...state, view: action.payload }
-    case "COMPLETE_ONBOARDING":
-      return { ...state, onboardingComplete: true, view: "dashboard" }
+    case "SET_VIEW": return { ...state, view: action.payload }
+    case "REORDER_TASKS": return { ...state, tasks: action.payload }
     case "TOGGLE_TASK":
       return {
         ...state,
-        tasks: state.tasks.map((t) =>
-          t.id === action.payload ? { ...t, enabled: !t.enabled } : t
-        ),
+        tasks: state.tasks.map((t) => t.id === action.payload ? { ...t, enabled: !t.enabled } : t),
       }
-    case "UPDATE_TASK_DURATION":
-      return {
-        ...state,
-        tasks: state.tasks.map((t) =>
-          t.id === action.payload.id ? { ...t, duration: action.payload.duration } : t
-        ),
-      }
-    case "UPDATE_TASK_NAME":
-      return {
-        ...state,
-        tasks: state.tasks.map((t) =>
-          t.id === action.payload.id ? { ...t, name: action.payload.name } : t
-        ),
-      }
-    case "ADD_TASK":
-      return { ...state, tasks: [...state.tasks, action.payload] }
     case "REMOVE_TASK":
       return { ...state, tasks: state.tasks.filter((t) => t.id !== action.payload) }
-    case "REORDER_TASKS":
-      return { ...state, tasks: action.payload }
-    case "START_TIMER":
-      return { ...state, isTimerRunning: true }
-    case "PAUSE_TIMER":
-      return { ...state, isTimerRunning: false }
-    case "RESET_TIMER":
-      return { ...state, isTimerRunning: false, elapsedSeconds: 0, activeTaskIndex: 0 }
-    case "TICK":
-      return { ...state, elapsedSeconds: state.elapsedSeconds + 1 }
-    case "NEXT_TASK": {
-      const enabledTasks = state.tasks.filter((t) => t.enabled)
-      const nextIndex = state.activeTaskIndex + 1
-      if (nextIndex >= enabledTasks.length) {
-        return { ...state, isTimerRunning: false, activeTaskIndex: 0, elapsedSeconds: 0 }
-      }
-      return { ...state, activeTaskIndex: nextIndex, elapsedSeconds: 0 }
-    }
-    case "UPDATE_NOTIFICATIONS":
-      return {
-        ...state,
-        notifications: { ...state.notifications, ...action.payload },
-      }
-    case "SET_WAKE_UP_TIME":
-      return { ...state, wakeUpTime: action.payload }
-    default:
-      return state
+    case "ADD_TASK":
+      return { ...state, tasks: [...state.tasks, action.payload] }
+    case "COMPLETE_ONBOARDING":
+      return { ...state, onboardingComplete: true, view: "dashboard" }
+    default: return state
   }
 }
 
-// --- Context ---
+// --- Context Definition ---
 interface RoutineContextType {
   state: AppState
-  dispatch: React.Dispatch<Action>
+  dispatch: (action: any) => Promise<void>
   enabledTasks: RoutineTask[]
   totalDuration: number
 }
 
 const RoutineContext = createContext<RoutineContextType | null>(null)
 
-// export function RoutineProvider({ children }: { children: ReactNode }) {
-//   const [state, dispatch] = useReducer(reducer, INITIAL_STATE)
-
-//   const enabledTasks = state.tasks.filter((t) => t.enabled)
-//   const totalDuration = enabledTasks.reduce((sum, t) => sum + t.duration, 0)
-
-//   return (
-//     <RoutineContext.Provider value={{ state, dispatch, enabledTasks, totalDuration }}>
-//       {children}
-//     </RoutineContext.Provider>
-//   )
-// }
+// --- Provider ---
 export function RoutineProvider({ children }: { children: ReactNode }) {
   const [state, rawDispatch] = useReducer(reducer, INITIAL_STATE)
 
-  // זו הפונקציה שתחסוך לך קוד בכל הפרויקט!
-  // בכל פעם שתעשי dispatch, זה גם יעדכן את המסך וגם ישמור בשרת אוטומטית.
-  const dispatch = useCallback(async (action: Action) => {
-    // 1. עדכון מיידי של המסך (שיהיה מהיר למשתמש)
+  // טעינה מ-Supabase ברגע שהאפליקציה עולה
+  useEffect(() => {
+    const fetchUserData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: tasks, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+
+      if (tasks && tasks.length > 0) {
+        const formattedTasks = tasks.map(t => ({
+          id: t.id,
+          name: t.name,      // מותאם לטבלה שלך
+          icon: t.icon,
+          duration: t.duration, // מותאם לטבלה שלך
+          enabled: t.enabled
+        }));
+        rawDispatch({ type: "REORDER_TASKS", payload: formattedTasks });
+      }
+    };
+    fetchUserData();
+  }, []);
+
+  // Dispatch חכם שמסנכרן לשרת אוטומטית
+  const dispatch = useCallback(async (action: any) => {
+    // 1. עדכון UI מיידי
     rawDispatch(action);
 
-    // 2. עדכון השרת (Supabase) בשקט ברקע
+    // 2. בדיקה אם המשתמש מחובר
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return; // אם המשתמש לא מחובר, אין מה לשמור
+    if (!user) return;
 
+    // 3. סנכרון ל-Supabase לפי סוג הפעולה
     switch (action.type) {
       case "ADD_TASK":
         await supabase.from('tasks').insert({
           id: action.payload.id,
           user_id: user.id,
-          title: action.payload.name,
-          duration_minutes: action.payload.duration,
+          name: action.payload.name,
+          duration: action.payload.duration,
           enabled: action.payload.enabled,
           icon: action.payload.icon
         });
@@ -196,10 +141,18 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
         break;
 
       case "REMOVE_TASK":
-        await supabase.from('tasks').delete().eq('id', action.payload);
+        await supabase.from('tasks')
+          .delete()
+          .eq('id', action.payload);
         break;
-        
-      // אפשר להוסיף כאן עוד מקרים בהמשך...
+
+      case "COMPLETE_ONBOARDING":
+        // עדכון סטטוס אונבורדינג בשרת (אם יצרת טבלת settings/profiles)
+        await supabase.from('profiles').upsert({ 
+          id: user.id, 
+          onboarding_complete: true 
+        });
+        break;
     }
   }, [state.tasks]);
 
@@ -217,14 +170,4 @@ export function useRoutine() {
   const context = useContext(RoutineContext)
   if (!context) throw new Error("useRoutine must be used within a RoutineProvider")
   return context
-}
-
-// Helper to get icon component name
-export function getTaskIconName(iconKey: string) {
-  return iconKey
-}
-
-// Generate unique ID
-export function generateId() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2)
 }
