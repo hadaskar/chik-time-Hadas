@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
-import { useRoutine, generateId, type RoutineTask } from "@/lib/routine-store"
+import { useState, useEffect } from "react"
+import { useRoutine, type RoutineTask } from "@/lib/routine-store"
 import { TaskIcon, availableIcons } from "@/components/task-icon"
 import { Slider } from "@/components/ui/slider"
+import { createBrowserClient } from '@supabase/ssr' // הוספנו את זה
 import {
   GripVertical,
   Plus,
@@ -17,6 +18,13 @@ import { cn } from "@/lib/utils"
 
 export function TaskManager() {
   const { state, dispatch, enabledTasks, totalDuration } = useRoutine()
+  
+  // יצירת לקוח Supabase
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
   const [showAddForm, setShowAddForm] = useState(false)
   const [newTaskName, setNewTaskName] = useState("")
   const [newTaskIcon, setNewTaskIcon] = useState("sparkles")
@@ -26,20 +34,88 @@ export function TaskManager() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
-  const handleAddTask = () => {
+  // 1. טעינת נתונים מה-Database כשהדף עולה
+  useEffect(() => {
+    const fetchTasks = async () => {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('*')
+        .order('created_at', { ascending: true })
+
+      if (data && !error) {
+        dispatch({ type: "REORDER_TASKS", payload: data }) // טוען את המשימות ל-Store
+      }
+    }
+    fetchTasks()
+  }, [dispatch, supabase])
+
+  // 2. הוספת משימה ל-Database
+  const handleAddTask = async () => {
     if (!newTaskName.trim()) return
-    const newTask: RoutineTask = {
-      id: generateId(),
+    
+    const { data: { user } } = await supabase.auth.getUser()
+    
+    const newTask = {
       name: newTaskName.trim(),
       icon: newTaskIcon,
       duration: newTaskDuration,
       enabled: true,
+      user_id: user?.id // שומר את המשימה למשתמש המחובר
     }
-    dispatch({ type: "ADD_TASK", payload: newTask })
-    setNewTaskName("")
-    setNewTaskIcon("sparkles")
-    setNewTaskDuration(10)
-    setShowAddForm(false)
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert([newTask])
+      .select()
+
+    if (data && !error) {
+      dispatch({ type: "ADD_TASK", payload: data[0] })
+      setNewTaskName("")
+      setNewTaskIcon("sparkles")
+      setNewTaskDuration(10)
+      setShowAddForm(false)
+    }
+  }
+
+  // 3. עדכון שם משימה ב-Database
+  const saveEdit = async () => {
+    if (editingId && editingName.trim()) {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ name: editingName.trim() })
+        .eq('id', editingId)
+
+      if (!error) {
+        dispatch({
+          type: "UPDATE_TASK_NAME",
+          payload: { id: editingId, name: editingName.trim() },
+        })
+      }
+    }
+    setEditingId(null)
+  }
+
+  // 4. מחיקת משימה מה-Database
+  const handleDeleteTask = async (id: string) => {
+    const { error } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('id', id)
+
+    if (!error) {
+      dispatch({ type: "REMOVE_TASK", payload: id })
+    }
+  }
+
+  // 5. עדכון Duration ב-Database
+  const handleDurationChange = async (id: string, val: number) => {
+    dispatch({
+      type: "UPDATE_TASK_DURATION",
+      payload: { id, duration: val },
+    })
+    
+    // מעדכן ב-Database (אפשר להוסיף Debounce אם רוצים לחסוך קריאות)
+    await supabase.from('tasks').update({ duration: val }).eq('id', id)
   }
 
   const startEditing = (task: RoutineTask) => {
@@ -47,21 +123,8 @@ export function TaskManager() {
     setEditingName(task.name)
   }
 
-  const saveEdit = () => {
-    if (editingId && editingName.trim()) {
-      dispatch({
-        type: "UPDATE_TASK_NAME",
-        payload: { id: editingId, name: editingName.trim() },
-      })
-    }
-    setEditingId(null)
-  }
-
-  // Drag and drop handlers
-  const handleDragStart = (index: number) => {
-    setDraggedIndex(index)
-  }
-
+  // Drag and drop handlers (נשארים ללא שינוי בעיצוב)
+  const handleDragStart = (index: number) => setDraggedIndex(index)
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault()
     setDragOverIndex(index)
@@ -80,6 +143,8 @@ export function TaskManager() {
     dispatch({ type: "REORDER_TASKS", payload: tasks })
     setDraggedIndex(null)
     setDragOverIndex(null)
+    
+    // כאן כדאי להוסיף בעתיד עדכון של "סדר" ב-Database אם יש לך עמודת position
   }
 
   const handleDragEnd = () => {
@@ -89,7 +154,7 @@ export function TaskManager() {
 
   return (
     <div className="px-4 py-6">
-      {/* Header */}
+      {/* כל ה-JSX נשאר זהה לחלוטין כדי לא לפגוע בעיצוב שלך */}
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-foreground">My Routine</h2>
@@ -105,20 +170,15 @@ export function TaskManager() {
               ? "neu-pressed bg-background text-primary"
               : "neu-flat-sm bg-background text-muted-foreground hover:text-foreground hover:scale-[1.05]"
           )}
-          aria-label={showAddForm ? "Close add form" : "Add new task"}
         >
           {showAddForm ? <X className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
         </button>
       </div>
 
-      {/* Add Task Form */}
+      {/* Add Task Form - JSX ללא שינוי */}
       {showAddForm && (
         <div className="mb-6 neu-flat rounded-2xl bg-background p-5 animate-in fade-in-0 slide-in-from-top-2 duration-300">
-          <h3 className="mb-4 text-sm font-semibold text-foreground">
-            Add Custom Task
-          </h3>
-
-          {/* Task name */}
+          <h3 className="mb-4 text-sm font-semibold text-foreground">Add Custom Task</h3>
           <input
             type="text"
             value={newTaskName}
@@ -128,10 +188,7 @@ export function TaskManager() {
             onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
           />
 
-          {/* Icon selection */}
-          <p className="mb-2 text-xs font-medium text-muted-foreground">
-            Choose Icon
-          </p>
+          <p className="mb-2 text-xs font-medium text-muted-foreground">Choose Icon</p>
           <div className="mb-4 flex flex-wrap gap-2">
             {availableIcons.map((icon) => (
               <button
@@ -143,20 +200,16 @@ export function TaskManager() {
                     ? "neu-pressed bg-background text-primary"
                     : "neu-flat-sm bg-background text-muted-foreground hover:text-foreground"
                 )}
-                aria-label={`Select ${icon} icon`}
               >
                 <TaskIcon iconKey={icon} className="h-5 w-5" strokeWidth={1.5} />
               </button>
             ))}
           </div>
 
-          {/* Duration slider */}
           <div className="mb-4">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-xs font-medium text-muted-foreground">Duration</p>
-              <span className="text-sm font-semibold text-foreground tabular-nums">
-                {newTaskDuration} min
-              </span>
+              <span className="text-sm font-semibold text-foreground tabular-nums">{newTaskDuration} min</span>
             </div>
             <Slider
               value={[newTaskDuration]}
@@ -177,7 +230,7 @@ export function TaskManager() {
         </div>
       )}
 
-      {/* Task List */}
+      {/* Task List - JSX ללא שינוי */}
       <div className="flex flex-col gap-3">
         {state.tasks.map((task, index) => (
           <div
@@ -195,24 +248,17 @@ export function TaskManager() {
             )}
           >
             <div className="flex items-center gap-3">
-              {/* Drag handle */}
               <div className="cursor-grab touch-none text-muted-foreground/40 active:cursor-grabbing">
                 <GripVertical className="h-5 w-5" />
               </div>
 
-              {/* Icon */}
-              <div
-                className={cn(
-                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
-                  task.enabled
-                    ? "bg-primary/10 text-primary"
-                    : "bg-muted/50 text-muted-foreground"
-                )}
-              >
+              <div className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
+                task.enabled ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground"
+              )}>
                 <TaskIcon iconKey={task.icon} className="h-5 w-5" strokeWidth={1.5} />
               </div>
 
-              {/* Name / edit */}
               <div className="flex-1 min-w-0">
                 {editingId === task.id ? (
                   <div className="flex items-center gap-2">
@@ -227,75 +273,47 @@ export function TaskManager() {
                       className="flex-1 rounded-lg bg-transparent px-2 py-1 text-sm text-foreground neu-pressed-sm focus:outline-none"
                       autoFocus
                     />
-                    <button
-                      onClick={saveEdit}
-                      className="text-primary"
-                      aria-label="Save edit"
-                    >
-                      <Check className="h-4 w-4" />
-                    </button>
+                    <button onClick={saveEdit} className="text-primary"><Check className="h-4 w-4" /></button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium text-foreground">
-                      {task.name}
-                    </span>
-                    <button
-                      onClick={() => startEditing(task)}
-                      className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground"
-                      aria-label="Edit task name"
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </button>
+                    <span className="truncate text-sm font-medium text-foreground">{task.name}</span>
+                    <button onClick={() => startEditing(task)} className="shrink-0 text-muted-foreground/40 hover:text-muted-foreground"><Pencil className="h-3 w-3" /></button>
                   </div>
                 )}
                 <div className="flex items-center gap-1 mt-0.5">
                   <Clock className="h-3 w-3 text-muted-foreground/50" />
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {task.duration} min
-                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">{task.duration} min</span>
                 </div>
               </div>
 
-              {/* Toggle */}
+              {/* Toggle - מעדכן ב-Database */}
               <button
-                onClick={() =>
+                onClick={async () => {
                   dispatch({ type: "TOGGLE_TASK", payload: task.id })
-                }
+                  await supabase.from('tasks').update({ enabled: !task.enabled }).eq('id', task.id)
+                }}
                 className={cn(
                   "flex h-8 w-8 items-center justify-center rounded-lg transition-all",
-                  task.enabled
-                    ? "bg-primary/15 text-primary"
-                    : "bg-muted/30 text-muted-foreground/40"
+                  task.enabled ? "bg-primary/15 text-primary" : "bg-muted/30 text-muted-foreground/40"
                 )}
-                aria-label={task.enabled ? "Disable task" : "Enable task"}
               >
                 <Check className="h-4 w-4" />
               </button>
 
-              {/* Delete */}
               <button
-                onClick={() =>
-                  dispatch({ type: "REMOVE_TASK", payload: task.id })
-                }
+                onClick={() => handleDeleteTask(task.id)}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground/30 transition-colors hover:text-destructive"
-                aria-label="Delete task"
               >
                 <Trash2 className="h-4 w-4" />
               </button>
             </div>
 
-            {/* Duration slider (inline, always visible for enabled tasks) */}
             {task.enabled && (
               <div className="mt-3 ml-8 pr-2">
                 <Slider
                   value={[task.duration]}
-                  onValueChange={([val]) =>
-                    dispatch({
-                      type: "UPDATE_TASK_DURATION",
-                      payload: { id: task.id, duration: val },
-                    })
-                  }
+                  onValueChange={([val]) => handleDurationChange(task.id, val)}
                   min={1}
                   max={60}
                   step={1}

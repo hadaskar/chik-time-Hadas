@@ -1,5 +1,8 @@
 "use client"
 
+import { useEffect, useState } from "react" // הוספנו
+import { useRouter } from "next/navigation" // הוספנו
+import { createBrowserClient } from '@supabase/ssr' // הוספנו
 import { RoutineProvider, useRoutine, type AppView } from "@/lib/routine-store"
 import { Onboarding } from "@/components/onboarding"
 import { ActiveTimer } from "@/components/active-timer"
@@ -10,6 +13,37 @@ import { cn } from "@/lib/utils"
 
 function AppContent() {
   const { state, dispatch } = useRoutine()
+  const router = useRouter()
+  const [loading, setLoading] = useState(true)
+
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+
+  // בדיקה האם המשתמש מחובר ברגע שהדף עולה
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session) {
+        // אם אין משתמש מחובר, שלח אותו לדף הלוגין
+        router.push('/login')
+      } else {
+        setLoading(false)
+      }
+    }
+    checkUser()
+  }, [router, supabase])
+
+  // בזמן הבדיקה, נציג מסך טעינה קטן (אופציונלי)
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="text-primary animate-pulse font-medium">Loading...</div>
+      </div>
+    )
+  }
 
   if (!state.onboardingComplete || state.view === "onboarding") {
     return <Onboarding />
