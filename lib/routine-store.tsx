@@ -1,12 +1,10 @@
+
 "use client"
 
 import React, { createContext, useContext, useReducer, useCallback, useEffect, type ReactNode } from "react"
-// ודאי שהנתיב ל-lib/supabase נכון (אם הקובץ בתוך hooks, אולי צריך ../lib/supabase)
-import { supabase } from "@/lib/supabase" 
+import { supabase } from "@/lib/supabase"
 
-// --- Types ---
-
-// 1. הוספנו export כדי למנוע את השגיאה בדפים אחרים
+// --- 1. הוספת export (מתקן את image_15ed41) ---
 export interface NotificationSettings {
   enabled: boolean
   sound: string
@@ -21,7 +19,7 @@ export interface RoutineTask {
   enabled: boolean
 }
 
-export type AppView = "onboarding" | "dashboard" | "tasks" | "settings"
+export type AppView = "onboarding" | "dashboard" | "tasks" | "timer" | "settings"
 
 export interface AppState {
   view: AppView
@@ -30,20 +28,14 @@ export interface AppState {
   activeTaskIndex: number
   isTimerRunning: boolean
   elapsedSeconds: number
-  notifications: NotificationSettings // משתמש ב-Interface שהגדרנו למעלה
+  notifications: NotificationSettings
   wakeUpTime: string
 }
-
-// --- Default Tasks ---
-export const DEFAULT_TASKS: RoutineTask[] = [
-  { id: "1", name: "Brush Teeth", icon: "sparkles", duration: 5, enabled: true },
-  { id: "2", name: "Shower", icon: "droplets", duration: 10, enabled: true },
-]
 
 const INITIAL_STATE: AppState = {
   view: "onboarding",
   onboardingComplete: false,
-  tasks: DEFAULT_TASKS,
+  tasks: [],
   activeTaskIndex: 0,
   isTimerRunning: false,
   elapsedSeconds: 0,
@@ -51,110 +43,165 @@ const INITIAL_STATE: AppState = {
   wakeUpTime: "07:00",
 }
 
-// --- Reducer ---
+
+
+// function reducer(state: AppState, action: any): AppState {
+
+//   switch (action.type) {
+//     case "SET_VIEW": 
+//       return { ...state, view: action.payload };
+
+//     case "START_ROUTINE": 
+//       return { 
+//         ...state, 
+//         view: "dashboard",      // משאירים דשבורד כי זה מה שה-page.tsx מבין
+//         isTimerRunning: true, 
+//         activeTaskIndex: 0, 
+//         elapsedSeconds: 0 
+//       };
+
+//     case "COMPLETE_ONBOARDING":
+//       return { ...state, onboardingComplete: true, view: "dashboard" };
+
+//     case "TICK": 
+//       return { ...state, elapsedSeconds: state.elapsedSeconds + 1 };
+
+//     case "REORDER_TASKS": 
+//       return { ...state, tasks: action.payload };
+    
+//     // ... שאר הפעולות (TOGGLE, UPDATE וכו')
+//     default: return state;
+//   }
+// }
+
+
+
+// --- 2. הגדרת ה-Context (מתקן את image_15fc5f) ---
+
 function reducer(state: AppState, action: any): AppState {
   switch (action.type) {
-    case "SET_VIEW": return { ...state, view: action.payload }
-    case "REORDER_TASKS": return { ...state, tasks: action.payload }
+    case "SET_VIEW": 
+      return { ...state, view: action.payload };
+// בתוך ה-switch ב-routine-store.ts
+
+case "SET_WAKE_UP_TIME":
+  return { ...state, wakeUpTime: action.payload };
+
+case "UPDATE_NOTIFICATIONS":
+  return {
+    ...state,
+    notifications: {
+      ...state.notifications,
+      ...action.payload,
+    },
+  };
+    // זה הכפתור של "התחל את היום שלך" - מחזירים אותו למצב שעבד
+    case "START_ROUTINE": 
+      return { 
+        ...state, 
+        view: "dashboard", 
+        isTimerRunning: true, 
+        activeTaskIndex: 0, 
+        elapsedSeconds: 0 
+      };
+
+    // מוסיפים את אלו בנפרד עבור הכפתורים בתוך דף הטיימר
+    case "START_TIMER":
+      return { ...state, isTimerRunning: true };
+
+    case "PAUSE_TIMER":
+      return { ...state, isTimerRunning: false };
+
+    case "RESET_TIMER":
+      return { ...state, elapsedSeconds: 0, isTimerRunning: false };
+
+    case "NEXT_TASK":
+      return { 
+        ...state, 
+        activeTaskIndex: state.activeTaskIndex + 1, 
+        elapsedSeconds: 0 
+      };
+
+    case "TICK": 
+      return { ...state, elapsedSeconds: state.elapsedSeconds + 1 };
+
+    case "COMPLETE_ONBOARDING":
+      return { ...state, onboardingComplete: true, view: "dashboard" };
+
+    case "REORDER_TASKS": 
+      return { ...state, tasks: action.payload };
+
     case "TOGGLE_TASK":
       return {
         ...state,
         tasks: state.tasks.map((t) => t.id === action.payload ? { ...t, enabled: !t.enabled } : t),
-      }
-    case "REMOVE_TASK":
-      return { ...state, tasks: state.tasks.filter((t) => t.id !== action.payload) }
-    case "ADD_TASK":
-      return { ...state, tasks: [...state.tasks, action.payload] }
-    case "COMPLETE_ONBOARDING":
-      return { ...state, onboardingComplete: true, view: "dashboard" }
-    default: return state
+      };
+
+    case "UPDATE_TASK_DURATION":
+      return {
+        ...state,
+        tasks: state.tasks.map((t) =>
+          t.id === action.payload.id ? { ...t, duration: action.payload.duration } : t
+        ),
+      };
+
+    default: 
+      return state;
   }
 }
-
-// --- Context Definition ---
 interface RoutineContextType {
   state: AppState
-  dispatch: (action: any) => Promise<void>
+  dispatch: (action: any) => void
   enabledTasks: RoutineTask[]
   totalDuration: number
 }
 
 const RoutineContext = createContext<RoutineContextType | null>(null)
 
-// --- Provider ---
 export function RoutineProvider({ children }: { children: ReactNode }) {
   const [state, rawDispatch] = useReducer(reducer, INITIAL_STATE)
 
-  // טעינה מ-Supabase ברגע שהאפליקציה עולה
+
+
+useEffect(() => {
+  let interval: NodeJS.Timeout
+  
+  // כאן היה השינוי: החלפנו מ-"timer" ל-"dashboard"
+  // כי זה השם של ה-view שבו הקומפוננטה ActiveTimer מוצגת
+  if (state.isTimerRunning && state.view === "dashboard") { 
+    interval = setInterval(() => {
+      rawDispatch({ type: "TICK" })
+    }, 1000)
+  }
+  
+  return () => clearInterval(interval)
+}, [state.isTimerRunning, state.view])
+  // טעינה מ-Supabase (עם שמות העמודות מהתמונות שלך)
   useEffect(() => {
-    const fetchUserData = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: tasks, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true });
-
-      if (tasks && tasks.length > 0) {
-        const formattedTasks = tasks.map(t => ({
-          id: t.id,
-          name: t.name,      // מותאם לטבלה שלך
-          icon: t.icon,
-          duration: t.duration, // מותאם לטבלה שלך
-          enabled: t.enabled
-        }));
-        rawDispatch({ type: "REORDER_TASKS", payload: formattedTasks });
+    const fetchTasks = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from('tasks').select('*').eq('user_id', user.id)
+      if (data) {
+        rawDispatch({ 
+          type: "REORDER_TASKS", 
+          payload: data.map(t => ({ 
+            id: t.id, 
+            name: t.name, // לפי image_15f15f
+            icon: t.icon, 
+            duration: t.duration, // לפי image_15f15f
+            enabled: t.enabled 
+          })) 
+        })
       }
-    };
-    fetchUserData();
-  }, []);
-
-  // Dispatch חכם שמסנכרן לשרת אוטומטית
-  const dispatch = useCallback(async (action: any) => {
-    // 1. עדכון UI מיידי
-    rawDispatch(action);
-
-    // 2. בדיקה אם המשתמש מחובר
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // 3. סנכרון ל-Supabase לפי סוג הפעולה
-    switch (action.type) {
-      case "ADD_TASK":
-        await supabase.from('tasks').insert({
-          id: action.payload.id,
-          user_id: user.id,
-          name: action.payload.name,
-          duration: action.payload.duration,
-          enabled: action.payload.enabled,
-          icon: action.payload.icon
-        });
-        break;
-
-      case "TOGGLE_TASK":
-        const task = state.tasks.find(t => t.id === action.payload);
-        await supabase.from('tasks')
-          .update({ enabled: !task?.enabled })
-          .eq('id', action.payload);
-        break;
-
-      case "REMOVE_TASK":
-        await supabase.from('tasks')
-          .delete()
-          .eq('id', action.payload);
-        break;
-
-      case "COMPLETE_ONBOARDING":
-        // עדכון סטטוס אונבורדינג בשרת (אם יצרת טבלת settings/profiles)
-        await supabase.from('profiles').upsert({ 
-          id: user.id, 
-          onboarding_complete: true 
-        });
-        break;
     }
-  }, [state.tasks]);
+    fetchTasks()
+  }, [])
+
+  const dispatch = useCallback((action: any) => {
+    rawDispatch(action)
+    // כאן אפשר להוסיף סנכרון ל-Supabase ברקע
+  }, [])
 
   const enabledTasks = state.tasks.filter((t) => t.enabled)
   const totalDuration = enabledTasks.reduce((sum, t) => sum + t.duration, 0)
@@ -168,6 +215,6 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
 
 export function useRoutine() {
   const context = useContext(RoutineContext)
-  if (!context) throw new Error("useRoutine must be used within a RoutineProvider")
+  if (!context) throw new Error("useRoutine error")
   return context
 }
