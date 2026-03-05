@@ -1,0 +1,126 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: #F0EDE8;
+  --foreground: #2D3436;
+  --card: #E8E4DE;
+  --card-foreground: #2D3436;
+  --popover: #E8E4DE;
+  --popover-foreground: #2D3436;
+  --primary: #6FA3C7;
+  --primary-foreground: #FFFFFF;
+  --secondary: #E8E4DE;
+  --secondary-foreground: #2D3436;
+  --muted: #DDD8D0;
+  --muted-foreground: #636E72;
+  --accent: #E8A87C;
+  --accent-foreground: #FFFFFF;
+  --destructive: #E17055;
+  --destructive-foreground: #FFFFFF;
+  --border: #D5CFC7;
+  --input: #D5CFC7;
+  --ring: #6FA3C7;
+  --chart-1: #6FA3C7;
+  --chart-2: #E8A87C;
+  --chart-3: #81C9A3;
+  --chart-4: #B8D4E3;
+  --chart-5: #D4956B;
+  --radius: 1rem;
+  --sidebar: #E8E4DE;
+  --sidebar-foreground: #2D3436;
+  --sidebar-primary: #6FA3C7;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #DDD8D0;
+  --sidebar-accent-foreground: #2D3436;
+  --sidebar-border: #D5CFC7;
+  --sidebar-ring: #6FA3C7;
+
+  --neu-shadow-light: #FAF7F2;
+  --neu-shadow-dark: #D5CFC7;
+  --sunrise-gradient: linear-gradient(135deg, #B8D4E3 0%, #E8A87C 50%, #F5C6A0 100%);
+}
+
+@theme inline {
+  --font-sans: 'DM Sans', 'Geist', 'Geist Fallback';
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Neumorphism utility classes */
+.neu-flat {
+  box-shadow:
+    6px 6px 12px var(--neu-shadow-dark),
+    -6px -6px 12px var(--neu-shadow-light);
+}
+
+.neu-pressed {
+  box-shadow:
+    inset 4px 4px 8px var(--neu-shadow-dark),
+    inset -4px -4px 8px var(--neu-shadow-light);
+}
+
+.neu-convex {
+  background: linear-gradient(145deg, var(--neu-shadow-light), var(--neu-shadow-dark));
+  box-shadow:
+    6px 6px 12px var(--neu-shadow-dark),
+    -6px -6px 12px var(--neu-shadow-light);
+}
+
+.neu-flat-sm {
+  box-shadow:
+    3px 3px 6px var(--neu-shadow-dark),
+    -3px -3px 6px var(--neu-shadow-light);
+}
+
+.neu-pressed-sm {
+  box-shadow:
+    inset 2px 2px 4px var(--neu-shadow-dark),
+    inset -2px -2px 4px var(--neu-shadow-light);
+}
