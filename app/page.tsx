@@ -11,6 +11,101 @@ import { Settings } from "@/components/settings"
 import { Timer, ListChecks, Settings2, Sun } from "lucide-react"
 import { cn } from "@/lib/utils"
 
+// function AppContent() {
+//   const { state, dispatch } = useRoutine()
+//   const router = useRouter()
+//   const [loading, setLoading] = useState(true)
+
+//   const supabase = createBrowserClient(
+//     process.env.NEXT_PUBLIC_SUPABASE_URL!,
+//     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+//   )
+
+//   // בדיקה האם המשתמש מחובר ברגע שהדף עולה
+//   useEffect(() => {
+//     const checkUser = async () => {
+//       const { data: { session } } = await supabase.auth.getSession()
+      
+//       if (!session) {
+//         // אם אין משתמש מחובר, שלח אותו לדף הלוגין
+//         router.push('/login')
+//       } else {
+//         setLoading(false)
+//       }
+//     }
+//     checkUser()
+//   }, [router, supabase])
+
+//   // בזמן הבדיקה, נציג מסך טעינה קטן (אופציונלי)
+//   if (loading) {
+//     return (
+//       <div className="flex min-h-screen items-center justify-center bg-background">
+//         <div className="text-primary animate-pulse font-medium">Loading...</div>
+//       </div>
+//     )
+//   }
+
+//   if (!state.onboardingComplete || state.view === "onboarding") {
+//     return <Onboarding />
+//   }
+
+//   const navItems: { view: AppView; icon: typeof Timer; label: string }[] = [
+//     { view: "dashboard", icon: Timer, label: "Timer" },
+//     { view: "tasks", icon: ListChecks, label: "Tasks" },
+//     { view: "settings", icon: Settings2, label: "Settings" },
+//   ]
+
+//   return (
+//     <div className="mx-auto flex min-h-screen max-w-lg flex-col">
+//       {/* Top bar */}
+//       <header className="flex items-center justify-between px-4 py-4">
+//         <div className="flex items-center gap-2">
+//           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+//             <Sun className="h-4 w-4" strokeWidth={1.5} />
+//           </div>
+//           <span className="text-lg font-semibold text-foreground tracking-tight">
+//             Rise
+//           </span>
+//         </div>
+//         <p className="text-xs text-muted-foreground">
+//           {getGreeting()}
+//         </p>
+//       </header>
+
+//       {/* Main content */}
+//       <main className="flex-1 overflow-y-auto pb-24">
+//         {state.view === "dashboard" && <ActiveTimer />}
+//         {state.view === "tasks" && <TaskManager />}
+//         {state.view === "settings" && <Settings />}
+//       </main>
+
+//       {/* Bottom Navigation */}
+//       <nav className="fixed bottom-0 left-0 right-0 z-50">
+//         <div className="mx-auto max-w-lg px-4 pb-4">
+//           <div className="neu-flat flex items-center justify-around rounded-2xl bg-background p-2">
+//             {navItems.map(({ view, icon: Icon, label }) => (
+//               <button
+//                 key={view}
+//                 onClick={() => dispatch({ type: "SET_VIEW", payload: view })}
+//                 className={cn(
+//                   "flex flex-col items-center gap-1 rounded-xl px-6 py-2.5 transition-all",
+//                   state.view === view
+//                     ? "neu-pressed bg-background text-primary"
+//                     : "text-muted-foreground hover:text-foreground"
+//                 )}
+//                 aria-label={label}
+//                 aria-current={state.view === view ? "page" : undefined}
+//               >
+//                 <Icon className="h-5 w-5" strokeWidth={1.5} />
+//                 <span className="text-[10px] font-medium">{label}</span>
+//               </button>
+//             ))}
+//           </div>
+//         </div>
+//       </nav>
+//     </div>
+//   )
+// }
 function AppContent() {
   const { state, dispatch } = useRoutine()
   const router = useRouter()
@@ -21,13 +116,18 @@ function AppContent() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
-  // בדיקה האם המשתמש מחובר ברגע שהדף עולה
+  // פונקציית התנתקות
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    router.push('/login')
+    router.refresh()
+  }
+
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       
       if (!session) {
-        // אם אין משתמש מחובר, שלח אותו לדף הלוגין
         router.push('/login')
       } else {
         setLoading(false)
@@ -36,7 +136,6 @@ function AppContent() {
     checkUser()
   }, [router, supabase])
 
-  // בזמן הבדיקה, נציג מסך טעינה קטן (אופציונלי)
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -67,9 +166,19 @@ function AppContent() {
             Rise
           </span>
         </div>
-        <p className="text-xs text-muted-foreground">
-          {getGreeting()}
-        </p>
+        
+        {/* כפתור התנתקות מעוצב בראש המסך */}
+        <div className="flex items-center gap-4">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
+            {getGreeting()}
+          </p>
+          <button 
+            onClick={handleSignOut}
+            className="text-[10px] font-bold text-muted-foreground hover:text-destructive border border-border px-2 py-1 rounded-md transition-colors"
+          >
+            LOGOUT
+          </button>
+        </div>
       </header>
 
       {/* Main content */}
@@ -79,7 +188,7 @@ function AppContent() {
         {state.view === "settings" && <Settings />}
       </main>
 
-      {/* Bottom Navigation */}
+      {/* Navigation (נשאר אותו דבר) */}
       <nav className="fixed bottom-0 left-0 right-0 z-50">
         <div className="mx-auto max-w-lg px-4 pb-4">
           <div className="neu-flat flex items-center justify-around rounded-2xl bg-background p-2">
@@ -93,8 +202,6 @@ function AppContent() {
                     ? "neu-pressed bg-background text-primary"
                     : "text-muted-foreground hover:text-foreground"
                 )}
-                aria-label={label}
-                aria-current={state.view === view ? "page" : undefined}
               >
                 <Icon className="h-5 w-5" strokeWidth={1.5} />
                 <span className="text-[10px] font-medium">{label}</span>
@@ -106,7 +213,6 @@ function AppContent() {
     </div>
   )
 }
-
 function getGreeting(): string {
   const hour = new Date().getHours()
   if (hour < 12) return "Good morning"
