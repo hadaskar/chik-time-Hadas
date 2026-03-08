@@ -6,9 +6,11 @@ import { useRouter } from 'next/navigation'
 import { Chrome, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react'
 
 export default function LoginPage() {
+  const [fullName, setFullName] = useState('') // שדה חדש לשם המלא
   const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const router = useRouter()
@@ -29,29 +31,34 @@ export default function LoginPage() {
     if (error) setErrorMsg(error.message)
   }
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    setErrorMsg(null)
+ const handleEmailAuth = async (e: React.FormEvent) => {
+  e.preventDefault()
+  setLoading(true)
+  setErrorMsg(null)
 
-    const { data, error } = isSignUp 
-      ? await supabase.auth.signUp({ 
-          email, 
-          password,
-          options: { emailRedirectTo: `${window.location.origin}/auth/callback` }
-        })
-      : await supabase.auth.signInWithPassword({ email, password })
-    
-    if (error) {
-      setErrorMsg(error.message)
-      setLoading(false)
-    } else {
-      // מכיוון שביטלת אישור אימייל, המשתמש נכנס מיד
-      router.push('/')
-      router.refresh()
-    }
+  // הוספנו את ה-data בתוך ה-options במקרה של הרשמה
+  const { data, error } = isSignUp 
+    ? await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: { 
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          data: { 
+            full_name: fullName // זה השדה שישמור את השם בשרת!
+          } 
+        }
+      })
+    : await supabase.auth.signInWithPassword({ email, password })
+  
+  if (error) {
+    setErrorMsg(error.message)
+    setLoading(false)
+  } else {
+    // מעבר לדף הבית - הכל עבר בהצלחה
+    router.push('/')
+    router.refresh()
   }
-
+}
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6 relative overflow-hidden">
       {/* אלמנטים עיצוביים ברקע */}
@@ -85,53 +92,86 @@ export default function LoginPage() {
             </div>
 
             {/* Email Form */}
-            <form onSubmit={handleEmailAuth} className="space-y-4">
-              {errorMsg && (
-                <div className="bg-destructive/10 border border-destructive/20 text-destructive text-xs py-3 px-4 rounded-xl text-center font-medium animate-in fade-in slide-in-from-top-1">
-                  {errorMsg}
-                </div>
-              )}
+         <form onSubmit={handleEmailAuth} className="space-y-4">
+  {errorMsg && (
+    <div className="bg-destructive/10 border border-destructive/20 text-destructive text-xs py-3 px-4 rounded-xl text-center font-medium animate-in fade-in slide-in-from-top-1">
+      {errorMsg}
+    </div>
+  )}
 
-              <div className="relative group">
-                <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                <input 
-                  type="email" 
-                  required
-                  placeholder="אימייל" 
-                  className="w-full h-14 bg-muted/40 border border-border focus:border-primary/50 focus:ring-4 focus:ring-primary/5 rounded-2xl pl-14 pr-5 transition-all outline-none"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)} 
-                />
-              </div>
+  {/* שדה שם מלא - יופיע רק אם המשתמש במצב הרשמה */}
+  {isSignUp && (
+    <div className="relative group animate-in fade-in slide-in-from-top-2 duration-300">
+      <div className="absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      </div>
+      <input 
+        type="text" 
+        required={isSignUp}
+        placeholder="שם מלא" 
+        className="w-full h-14 bg-muted/40 border border-border focus:border-primary/50 focus:ring-4 focus:ring-primary/5 rounded-2xl pl-14 pr-5 transition-all outline-none text-lg"
+        value={fullName}
+        onChange={(e) => setFullName(e.target.value)} 
+      />
+    </div>
+  )}
 
-              <div className="relative group">
-                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                <input 
-                  type="password" 
-                  required
-                  placeholder="סיסמה" 
-                  className="w-full h-14 bg-muted/40 border border-border focus:border-primary/50 focus:ring-4 focus:ring-primary/5 rounded-2xl pl-14 pr-5 transition-all outline-none"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)} 
-                />
-              </div>
+  {/* שדה אימייל */}
+  <div className="relative group">
+    <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+    <input 
+      type="email" 
+      required
+      placeholder="אימייל" 
+      className="w-full h-14 bg-muted/40 border border-border focus:border-primary/50 focus:ring-4 focus:ring-primary/5 rounded-2xl pl-14 pr-5 transition-all outline-none text-lg"
+      value={email}
+      onChange={(e) => setEmail(e.target.value)} 
+    />
+  </div>
+{/* שדה סיסמה */}
+<div className="relative group">
+  <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+  
+  <input 
+    type={showPassword ? "text" : "password"} 
+    required
+    placeholder="סיסמה" 
+    className="w-full h-14 bg-muted/40 border border-border focus:border-primary/50 focus:ring-4 focus:ring-primary/5 rounded-2xl pl-14 pr-14 transition-all outline-none text-lg"
+    value={password}
+    onChange={(e) => setPassword(e.target.value)} 
+  />
 
-              <button 
-                type="submit"
-                disabled={loading}
-                className="w-full h-14 bg-primary text-primary-foreground rounded-2xl font-bold hover:opacity-90 transition-all active:scale-95 shadow-lg shadow-primary/20 disabled:opacity-70 flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                ) : (
-                  <>
-                    {isSignUp ? 'צרי חשבון' : 'כניסה למערכת'}
-                    <ArrowRight className="w-5 h-5" />
-                  </>
-                )}
-              </button>
-            </form>
+  <button
+    type="button"
+    onClick={() => setShowPassword(!showPassword)}
+    className="absolute right-5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
+  >
+    {showPassword ? (
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.52 13.52 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
+    ) : (
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+    )}
+  </button>
+</div>
 
+  {/* כפתור כניסה/הרשמה הגדול */}
+  <button 
+    type="submit"
+    disabled={loading}
+    className="w-full h-16 bg-primary text-primary-foreground rounded-2xl font-black text-2xl hover:opacity-90 transition-all active:scale-95 shadow-lg flex items-center justify-center gap-4 disabled:opacity-70 mt-4"
+  >
+    {loading ? (
+      <Loader2 className="w-7 h-7 animate-spin" />
+    ) : (
+      <>
+        <span className="tracking-tight">
+          {isSignUp ? 'צור חשבון' : 'כניסה למערכת'}
+        </span>
+        <ArrowRight className="w-7 h-7 stroke-[2.5px]" /> 
+      </>
+    )}
+  </button>
+</form>
             {/* Toggle Login/Signup */}
             <button 
               onClick={() => {
@@ -141,9 +181,9 @@ export default function LoginPage() {
               className="w-full text-center text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors py-2"
             >
               {isSignUp ? (
-                <>כבר יש לך חשבון? <span className="text-primary underline underline-offset-4">התחברי כאן</span></>
+                <>כבר יש לך חשבון? <span className="text-primary underline underline-offset-4">התחבר כאן</span></>
               ) : (
-                <>עוד לא רשומה? <span className="text-primary underline underline-offset-4">צרי חשבון חדש</span></>
+                <>עוד לא רשום? <span className="text-primary underline underline-offset-4">צור חשבון חדש</span></>
               )}
             </button>
           </div>

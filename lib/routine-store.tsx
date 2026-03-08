@@ -160,46 +160,105 @@ useEffect(() => {
   // טעינה מ-Supabase (עם שמות העמודות מהתמונות שלך)
 useEffect(() => {
   const fetchTasks = async () => {
+    // 1. בדיקת משתמש מחובר
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return
 
-    const { data } = await supabase.from('tasks').select('*').eq('user_id', user.id)
+    // 2. שליפת המשימות מהטבלה
+    const { data, error } = await supabase
+      .from('tasks')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('task_id', { ascending: true }) // סדר לפי המזהה הקבוע שלנו
 
     if (data && data.length > 0) {
-      // משתמש קיים - טוענים את שלו ומכבים את נורת ה"חדש"
-      rawDispatch({ type: "REORDER_TASKS", payload: data })
+      // --- המהלך המנצח ---
+      // אנחנו הופכים את הנתונים מהפורמט של ה-DB לפורמט שה-UI מכיר
+      const formattedTasks = data.map(t => ({
+        ...t,
+        id: t.task_id // מחזירים את "1", "2" וכו' לשדה ה-id כדי שה-Checkbox יעבוד
+      }))
+
+      rawDispatch({ type: "REORDER_TASKS", payload: formattedTasks })
       rawDispatch({ type: "SET_NEW_USER", payload: false })
+      
+      console.log("נתונים נטענו בהצלחה מהשרת:", formattedTasks.length, "משימות")
     } else {
-      // משתמש חדש לגמרי - משאירים את ברירת המחדל ומדליקים נורה
+      // משתמש חדש או טבלה ריקה - נשתמש בברירת המחדל שכבר קיימת ב-Initial State
       rawDispatch({ type: "SET_NEW_USER", payload: true })
-    }
-  }
-  fetchTasks()
-}, [])
-
-const dispatch = useCallback(async (action: any) => {
-  rawDispatch(action)
-
-  if (action.type === "START_ROUTINE" && state.isNewUser) {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (user) {
-      // לוקחים רק את מה שמסומן ב-V מהמשימות הדיפולטיביות
-      const initialTasks = state.tasks
-        .filter(t => t.enabled)
-        .map(({ id, ...task }) => ({
-          ...task,
-          user_id: user.id
-        }))
-
-      if (initialTasks.length > 0) {
-        await supabase.from('tasks').insert(initialTasks)
-        // מכבים את הנורה כדי שלא יכניס שוב בפעם הבאה
-        rawDispatch({ type: "SET_NEW_USER", payload: false })
-        console.log("First time setup complete!")
+      
+      // אם משום מה ה-State ריק לגמרי, נטעין את הדיפולט
+      if (state.tasks.length === 0) {
+        rawDispatch({ type: "REORDER_TASKS", payload: DEFAULT_TASKS })
       }
     }
+
+    if (error) {
+      console.error("שגיאה במשיכת נתונים:", error.message)
+    }
   }
-}, [state.tasks, state.isNewUser])
+
+  fetchTasks()
+}, []) // רץ פעם אחת בטעינה ראשונית של ה-Provider/ רץ רק פעם אחת בטעינה ראשונית
+const dispatch = useCallback(async (action: any) => {
+  // 1. עדכון ה-UI מיידית (שה-V יידלק במסך)
+  rawDispatch(action);
+
+  // 2. סנכרון לשרת רק כשלוחצים על "התחל רוטינה"
+ // בתוך ה-dispatch ב-RoutineProvider
+// אנחנו רוצים לסנכרן גם ב-START_ROUTINE וגם ב-COMPLETE_ONBOARDING
+if (action.type === "START_ROUTINE" || action.type === "COMPLETE_ONBOARDING") {
+    
+      // ... שאר קוד הסנכרון שכבר כתבנו עם ה-filter וה-map ...
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        console.error("שגיאה: אין משתמש מחובר!");
+        return;
+      }
+
+      // סינון המשימות שסומנו ב-V
+      const tasksToSync = state.tasks
+        .filter(task => task.enabled === true)
+        .map((task) => ({
+          user_id: user.id,
+          task_id: String(task.id), // המזהה "1", "2" וכו'
+          name: task.name,
+          icon: task.icon,
+          duration: task.duration,
+          enabled: true
+        }));
+
+      // --- כאן הבדיקה (DEBUG) שביקשתי ---
+      console.log("DEBUG: המשימות שאני שולחת לסנכרון:", tasksToSync);
+
+      if (tasksToSync.length === 0) {
+        console.warn("אזהרה: המערך ריק! אין משימות עם enabled: true");
+        return;
+      }
+      // ---------------------------------
+
+      const { data, error } = await supabase
+        .from('tasks')
+        .upsert(tasksToSync, { 
+          onConflict: 'user_id, task_id' 
+        })
+        .select(); // הוספנו select כדי לראות מה חזר
+
+      if (error) {
+        console.error("שגיאת סופאבייס (RLS או מבנה):", error.message);
+      } else {
+        console.log("הצלחה! הנתונים שנשמרו במסד:", data);
+        if (state.isNewUser) {
+          rawDispatch({ type: "SET_NEW_USER", payload: false });
+        }
+      }
+
+    } catch (err) {
+      console.error("שגיאה קריטית בתהליך השליחה:", err);
+    }
+  }
+}, [state.tasks, state.isNewUser]);
 
   const enabledTasks = state.tasks.filter((t) => t.enabled)
   const totalDuration = enabledTasks.reduce((sum, t) => sum + t.duration, 0)

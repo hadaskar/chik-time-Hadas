@@ -50,62 +50,70 @@ export function TaskManager() {
   }, [dispatch, supabase])
 
   // 2. הוספת משימה ל-Database
-  const handleAddTask = async () => {
-    if (!newTaskName.trim()) return
-    
-    const { data: { user } } = await supabase.auth.getUser()
-    
-    const newTask = {
-      name: newTaskName.trim(),
-      icon: newTaskIcon,
-      duration: newTaskDuration,
-      enabled: true,
-      user_id: user?.id // שומר את המשימה למשתמש המחובר
-    }
+const handleAddTask = async () => {
+  if (!newTaskName.trim()) return
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return
 
-    const { data, error } = await supabase
-      .from('tasks')
-      .insert([newTask])
-      .select()
+  // יוצרים מזהה ייחודי חדש למשימה
+  const newTaskId = crypto.randomUUID()
 
-    if (data && !error) {
-      dispatch({ type: "ADD_TASK", payload: data[0] })
-      setNewTaskName("")
-      setNewTaskIcon("sparkles")
-      setNewTaskDuration(10)
-      setShowAddForm(false)
-    }
+  const newTaskForDB = {
+    task_id: newTaskId, // המזהה שאנחנו שולטים בו
+    name: newTaskName.trim(),
+    icon: newTaskIcon,
+    duration: newTaskDuration,
+    enabled: true,
+    user_id: user.id
   }
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert([newTaskForDB])
+    .select()
+
+  if (!error && data) {
+    // חשוב: אנחנו מעדכנים את ה-Store עם ה-task_id כשדה ה-id
+    dispatch({ type: "ADD_TASK", payload: { ...data[0], id: data[0].task_id } })
+    setNewTaskName("")
+    setShowAddForm(false)
+  } else {
+    console.error("Error adding task:", error?.message)
+  }
+}
 
   // 3. עדכון שם משימה ב-Database
-  const saveEdit = async () => {
-    if (editingId && editingName.trim()) {
-      const { error } = await supabase
-        .from('tasks')
-        .update({ name: editingName.trim() })
-        .eq('id', editingId)
-
-      if (!error) {
-        dispatch({
-          type: "UPDATE_TASK_NAME",
-          payload: { id: editingId, name: editingName.trim() },
-        })
-      }
-    }
-    setEditingId(null)
-  }
-
-  // 4. מחיקת משימה מה-Database
-  const handleDeleteTask = async (id: string) => {
+const saveEdit = async () => {
+  if (editingId && editingName.trim()) {
     const { error } = await supabase
       .from('tasks')
-      .delete()
-      .eq('id', id)
+      .update({ name: editingName.trim() })
+      .eq('task_id', editingId) // משתמשים ב-task_id!
 
     if (!error) {
-      dispatch({ type: "REMOVE_TASK", payload: id })
+      dispatch({
+        type: "UPDATE_TASK_NAME",
+        payload: { id: editingId, name: editingName.trim() },
+      })
     }
   }
+  setEditingId(null)
+}
+
+  // 4. מחיקת משימה מה-Database
+const handleDeleteTask = async (id: string) => {
+  const { error } = await supabase
+    .from('tasks')
+    .delete()
+    .eq('task_id', id) // משתמשים ב-task_id!
+
+  if (!error) {
+    dispatch({ type: "REMOVE_TASK", payload: id })
+  } else {
+    console.error("Delete failed:", error.message)
+  }
+}
 
   // 5. עדכון Duration ב-Database
   const handleDurationChange = async (id: string, val: number) => {
