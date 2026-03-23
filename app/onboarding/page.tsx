@@ -300,7 +300,7 @@ export default function OnboardingPage() {
                   if (!state.onboardingComplete) {
                     setStep(1)
                   } else {
-                    router.push('/')
+                    router.push('/dashboard')
                   }
                 }}
                 className="neu-flat-sm flex items-center gap-1.5 rounded-2xl bg-background px-4 py-3 text-sm text-muted-foreground transition-all hover:scale-[1.02] active:scale-[0.98]"

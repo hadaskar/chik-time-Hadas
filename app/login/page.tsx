@@ -3,10 +3,10 @@
 import { createBrowserClient } from '@supabase/ssr'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Chrome, Mail, Lock, ArrowRight, Loader2 } from 'lucide-react'
+import { Chrome, Mail, Lock, ArrowLeft, Loader2, Eye, EyeOff, User } from 'lucide-react'
 
 export default function LoginPage() {
-  const [fullName, setFullName] = useState('') // שדה חדש לשם המלא
+  const [fullName, setFullName] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -24,175 +24,168 @@ export default function LoginPage() {
     setErrorMsg(null)
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     })
     if (error) setErrorMsg(error.message)
   }
 
- const handleEmailAuth = async (e: React.FormEvent) => {
-  e.preventDefault()
-  setLoading(true)
-  setErrorMsg(null)
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setErrorMsg(null)
 
-  // הוספנו את ה-data בתוך ה-options במקרה של הרשמה
-  const { data, error } = isSignUp 
-    ? await supabase.auth.signUp({ 
-        email, 
-        password,
-        options: { 
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
-          data: { 
-            full_name: fullName // זה השדה שישמור את השם בשרת!
-          } 
-        }
-      })
-    : await supabase.auth.signInWithPassword({ email, password })
-  
-  if (error) {
-    setErrorMsg(error.message)
-    setLoading(false)
-  } else {
-    // מעבר לדף הבית - הכל עבר בהצלחה
-    router.push('/')
-    router.refresh()
+    const { error } = isSignUp
+      ? await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            data: { full_name: fullName },
+          },
+        })
+      : await supabase.auth.signInWithPassword({ email, password })
+
+    if (error) {
+      setErrorMsg(error.message)
+      setLoading(false)
+    } else {
+      router.push('/dashboard')
+      router.refresh()
+    }
   }
-}
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6 relative overflow-hidden">
-      {/* אלמנטים עיצוביים ברקע */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px] animate-pulse" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/20 rounded-full blur-[120px] animate-pulse" />
 
-      <div className="w-full max-w-md z-10 transition-all duration-500">
-        <div className="bg-card border border-border/50 backdrop-blur-xl shadow-2xl rounded-[2.5rem] p-8 md:p-12">
-          
+  return (
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-12">
+
+      {/* Background image */}
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: "url('/nattanan23-clock-2696234_1920.jpg')" }}
+      />
+      <div className="absolute inset-0 bg-white/65 backdrop-blur-[3px]" />
+
+      {/* Card */}
+      <div className="relative z-10 w-full max-w-sm">
+        <div className="neu-flat rounded-[2rem] bg-background p-8">
+
           {/* Header */}
-          <div className="text-center mb-10">
-            <h1 className="text-5xl font-black tracking-tighter text-foreground mb-3 italic drop-shadow-sm">צ'יק טיים</h1>
-            <p className="text-muted-foreground text-sm font-medium">
-              {isSignUp ? 'צרי חשבון חדש כדי להתחיל' : 'המלווה האישי שלך לבוקר מוצלח'}
+          <div className="mb-8 text-center">
+            <h1 className="text-4xl font-black tracking-tight text-foreground">
+              Chik<span className="text-primary"> Time</span>
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {isSignUp ? '��� ����� ��� ��� ������' : '������ ����� ��� ����� �����'}
             </p>
           </div>
 
-          <div className="space-y-6">
-            {/* Google Login Button */}
-            <button 
+          <div className="space-y-3">
+
+            {/* Google */}
+            <button
               onClick={handleGoogleLogin}
-              className="w-full flex items-center justify-center gap-3 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-14 rounded-2xl font-bold transition-all active:scale-95 border border-border group"
+              className="neu-flat flex w-full items-center justify-center gap-3 rounded-[16px] bg-background py-4 text-sm font-semibold text-foreground transition-all hover:scale-[1.02] active:neu-pressed active:scale-[0.98]"
             >
-              <Chrome className="w-5 h-5 group-hover:rotate-12 transition-transform" />
-              המשך עם Google
+              <Chrome className="h-4 w-4" />
+              ���� �� Google
             </button>
 
-            <div className="relative text-center">
-              <span className="bg-card px-4 text-[10px] text-muted-foreground uppercase tracking-[0.2em] relative z-10">או באמצעות אימייל</span>
-              <div className="absolute top-1/2 left-0 w-full h-[1px] bg-border/60" />
+            {/* Divider */}
+            <div className="relative flex items-center gap-3 py-1">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60">�� ������� ������</span>
+              <div className="h-px flex-1 bg-border" />
             </div>
 
-            {/* Email Form */}
-         <form onSubmit={handleEmailAuth} className="space-y-4">
-  {errorMsg && (
-    <div className="bg-destructive/10 border border-destructive/20 text-destructive text-xs py-3 px-4 rounded-xl text-center font-medium animate-in fade-in slide-in-from-top-1">
-      {errorMsg}
-    </div>
-  )}
+            {/* Error */}
+            {errorMsg && (
+              <div className="rounded-[14px] bg-destructive/10 px-4 py-3 text-center text-xs text-destructive">
+                {errorMsg}
+              </div>
+            )}
 
-  {/* שדה שם מלא - יופיע רק אם המשתמש במצב הרשמה */}
-  {isSignUp && (
-    <div className="relative group animate-in fade-in slide-in-from-top-2 duration-300">
-      <div className="absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors">
-        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      </div>
-      <input 
-        type="text" 
-        required={isSignUp}
-        placeholder="שם מלא" 
-        className="w-full h-14 bg-muted/40 border border-border focus:border-primary/50 focus:ring-4 focus:ring-primary/5 rounded-2xl pl-14 pr-5 transition-all outline-none text-lg"
-        value={fullName}
-        onChange={(e) => setFullName(e.target.value)} 
-      />
-    </div>
-  )}
+            {/* Form */}
+            <form onSubmit={handleEmailAuth} className="space-y-3">
 
-  {/* שדה אימייל */}
-  <div className="relative group">
-    <Mail className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-    <input 
-      type="email" 
-      required
-      placeholder="אימייל" 
-      className="w-full h-14 bg-muted/40 border border-border focus:border-primary/50 focus:ring-4 focus:ring-primary/5 rounded-2xl pl-14 pr-5 transition-all outline-none text-lg"
-      value={email}
-      onChange={(e) => setEmail(e.target.value)} 
-    />
-  </div>
-{/* שדה סיסמה */}
-<div className="relative group">
-  <Lock className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-  
-  <input 
-    type={showPassword ? "text" : "password"} 
-    required
-    placeholder="סיסמה" 
-    className="w-full h-14 bg-muted/40 border border-border focus:border-primary/50 focus:ring-4 focus:ring-primary/5 rounded-2xl pl-14 pr-14 transition-all outline-none text-lg"
-    value={password}
-    onChange={(e) => setPassword(e.target.value)} 
-  />
-
-  <button
-    type="button"
-    onClick={() => setShowPassword(!showPassword)}
-    className="absolute right-5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors focus:outline-none"
-  >
-    {showPassword ? (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.52 13.52 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" x2="22" y1="2" y2="22"/></svg>
-    ) : (
-      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
-    )}
-  </button>
-</div>
-
-  {/* כפתור כניסה/הרשמה הגדול */}
-  <button 
-    type="submit"
-    disabled={loading}
-    className="w-full h-16 bg-primary text-primary-foreground rounded-2xl font-black text-2xl hover:opacity-90 transition-all active:scale-95 shadow-lg flex items-center justify-center gap-4 disabled:opacity-70 mt-4"
-  >
-    {loading ? (
-      <Loader2 className="w-7 h-7 animate-spin" />
-    ) : (
-      <>
-        <span className="tracking-tight">
-          {isSignUp ? 'צור חשבון' : 'כניסה למערכת'}
-        </span>
-        <ArrowRight className="w-7 h-7 stroke-[2.5px]" /> 
-      </>
-    )}
-  </button>
-</form>
-            {/* Toggle Login/Signup */}
-            <button 
-              onClick={() => {
-                setIsSignUp(!isSignUp)
-                setErrorMsg(null)
-              }}
-              className="w-full text-center text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors py-2"
-            >
-              {isSignUp ? (
-                <>כבר יש לך חשבון? <span className="text-primary underline underline-offset-4">התחבר כאן</span></>
-              ) : (
-                <>עוד לא רשום? <span className="text-primary underline underline-offset-4">צור חשבון חדש</span></>
+              {isSignUp && (
+                <div className="neu-pressed flex items-center gap-3 rounded-[16px] bg-background px-4 py-3">
+                  <User className="h-4 w-4 shrink-0 text-primary/60" />
+                  <input
+                    type="text"
+                    required={isSignUp}
+                    placeholder="�� ���"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                  />
+                </div>
               )}
+
+              <div className="neu-pressed flex items-center gap-3 rounded-[16px] bg-background px-4 py-3">
+                <Mail className="h-4 w-4 shrink-0 text-primary/60" />
+                <input
+                  type="email"
+                  required
+                  placeholder="������"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                />
+              </div>
+
+              <div className="neu-pressed flex items-center gap-3 rounded-[16px] bg-background px-4 py-3">
+                <Lock className="h-4 w-4 shrink-0 text-primary/60" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  placeholder="�����"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="text-muted-foreground/50 hover:text-primary transition-colors"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="group mt-2 flex w-full items-center justify-center gap-3 rounded-full bg-primary py-4 text-sm font-bold text-white shadow-[0_8px_30px_rgba(111,163,199,0.4)] transition-all hover:scale-[1.03] hover:shadow-[0_12px_40px_rgba(111,163,199,0.55)] active:scale-[0.97] disabled:opacity-70"
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <span>{isSignUp ? '��� �����' : '����� ������'}</span>
+                    <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+                  </>
+                )}
+              </button>
+            </form>
+
+            {/* Toggle */}
+            <button
+              onClick={() => { setIsSignUp(!isSignUp); setErrorMsg(null) }}
+              className="w-full pt-1 text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {isSignUp
+                ? <span>��� �� �� �����? <span className="text-primary font-semibold underline underline-offset-2">������ ���</span></span>
+                : <span>��� �� �����? <span className="text-primary font-semibold underline underline-offset-2">��� ����� ���</span></span>
+              }
             </button>
+
           </div>
         </div>
-        
-        <p className="text-center mt-8 text-[10px] text-muted-foreground/40 uppercase tracking-widest font-medium">
-          Chik Time © 2026 • Morning Mastery
+
+        <p className="mt-6 text-center text-[10px] uppercase tracking-widest text-muted-foreground/40">
+          Chik Time � 2026
         </p>
       </div>
+
     </div>
   )
 }

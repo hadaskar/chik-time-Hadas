@@ -1,10 +1,22 @@
 "use client"
-import React from "react"
+import React, { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
+import { supabase } from "@/lib/supabase"
 
 export default function Home() {
   const router = useRouter()
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      if (data?.user) setIsLoggedIn(true)
+    })
+  }, [])
+
+  const handleStart = () => {
+    router.push(isLoggedIn ? "/dashboard" : "/login")
+  }
 
   return (
     <div className="relative flex min-h-screen w-full flex-col items-center justify-center overflow-hidden">
@@ -41,7 +53,7 @@ export default function Home() {
 
         {/* CTA button */}
         <button
-          onClick={() => router.push("/login")}
+          onClick={handleStart}
           className="group flex items-center gap-3 rounded-full bg-primary px-8 py-4 text-sm font-bold text-white shadow-[0_8px_30px_rgba(111,163,199,0.45)] transition-all hover:scale-[1.04] hover:shadow-[0_12px_40px_rgba(111,163,199,0.6)] active:scale-[0.97]"
         >
           <span>בואי נתחיל</span>
