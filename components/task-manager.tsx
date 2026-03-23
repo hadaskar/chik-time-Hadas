@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRoutine, type RoutineTask } from "@/lib/routine-store"
 import { TaskIcon, availableIcons } from "@/components/task-icon"
 import { Slider } from "@/components/ui/slider"
@@ -13,8 +13,10 @@ import {
   Pencil,
   X,
   Check,
+  Play
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useRouter } from "next/navigation";    // חדש
 
 export function TaskManager() {
   const { state, dispatch, enabledTasks, totalDuration } = useRoutine()
@@ -25,6 +27,8 @@ export function TaskManager() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 
+  const router = useRouter();                   // חדיש
+
   const [showAddForm, setShowAddForm] = useState(false)
   const [newTaskName, setNewTaskName] = useState("")
   const [newTaskIcon, setNewTaskIcon] = useState("sparkles")
@@ -34,24 +38,10 @@ export function TaskManager() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
 
-  // 1. טעינת נתונים מה-Database כשהדף עולה
-  useEffect(() => {
-    const fetchTasks = async () => {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('*')
-        .order('created_at', { ascending: true })
-
-      if (data && !error) {
-        dispatch({ type: "REORDER_TASKS", payload: data }) // טוען את המשימות ל-Store
-      }
-    }
-    fetchTasks()
-  }, [dispatch, supabase])
-
   // 2. הוספת משימה ל-Database
 const handleAddTask = async () => {
   if (!newTaskName.trim()) return
+  if (!state.activeSlotId) return
   
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return
@@ -60,12 +50,13 @@ const handleAddTask = async () => {
   const newTaskId = crypto.randomUUID()
 
   const newTaskForDB = {
-    task_id: newTaskId, // המזהה שאנחנו שולטים בו
+    task_id: newTaskId,
     name: newTaskName.trim(),
     icon: newTaskIcon,
     duration: newTaskDuration,
     enabled: true,
-    user_id: user.id
+    user_id: user.id,
+    time_slot_id: state.activeSlotId
   }
 
   const { data, error } = await supabase
@@ -86,10 +77,16 @@ const handleAddTask = async () => {
   // 3. עדכון שם משימה ב-Database
 const saveEdit = async () => {
   if (editingId && editingName.trim()) {
-    const { error } = await supabase
+    let query = supabase
       .from('tasks')
       .update({ name: editingName.trim() })
-      .eq('task_id', editingId) // משתמשים ב-task_id!
+      .eq('task_id', editingId)
+
+    if (state.activeSlotId) {
+      query = query.eq('time_slot_id', state.activeSlotId)
+    }
+
+    const { error } = await query
 
     if (!error) {
       dispatch({
@@ -103,10 +100,16 @@ const saveEdit = async () => {
 
   // 4. מחיקת משימה מה-Database
 const handleDeleteTask = async (id: string) => {
-  const { error } = await supabase
+  let query = supabase
     .from('tasks')
     .delete()
-    .eq('task_id', id) // משתמשים ב-task_id!
+    .eq('task_id', id)
+
+  if (state.activeSlotId) {
+    query = query.eq('time_slot_id', state.activeSlotId)
+  }
+
+  const { error } = await query
 
   if (!error) {
     dispatch({ type: "REMOVE_TASK", payload: id })
@@ -122,8 +125,17 @@ const handleDeleteTask = async (id: string) => {
       payload: { id, duration: val },
     })
     
-    // מעדכן ב-Database (אפשר להוסיף Debounce אם רוצים לחסוך קריאות)
-    await supabase.from('tasks').update({ duration: val }).eq('id', id)
+    // מעדכן רק את המשימה של הזמן הפעיל
+    let query = supabase
+      .from('tasks')
+      .update({ duration: val })
+      .eq('task_id', id)
+
+    if (state.activeSlotId) {
+      query = query.eq('time_slot_id', state.activeSlotId)
+    }
+
+    await query
   }
 
   const startEditing = (task: RoutineTask) => {
@@ -158,6 +170,14 @@ const handleDeleteTask = async (id: string) => {
   const handleDragEnd = () => {
     setDraggedIndex(null)
     setDragOverIndex(null)
+  }
+
+  if (state.isLoadingTasks) {
+    return (
+      <div className="px-4 py-6 flex items-center justify-center h-40">
+        <p className="text-muted-foreground text-sm">טוען משימות...</p>
+      </div>
+    )
   }
 
   return (
@@ -299,7 +319,16 @@ const handleDeleteTask = async (id: string) => {
               <button
                 onClick={async () => {
                   dispatch({ type: "TOGGLE_TASK", payload: task.id })
-                  await supabase.from('tasks').update({ enabled: !task.enabled }).eq('id', task.id)
+                  let query = supabase
+                    .from('tasks')
+                    .update({ enabled: !task.enabled })
+                    .eq('task_id', task.id)
+
+                  if (state.activeSlotId) {
+                    query = query.eq('time_slot_id', state.activeSlotId)
+                  }
+
+                  await query
                 }}
                 className={cn(
                   "flex h-8 w-8 items-center justify-center rounded-lg transition-all",
@@ -329,8 +358,24 @@ const handleDeleteTask = async (id: string) => {
               </div>
             )}
           </div>
+          
         ))}
+        {/* הוסיפי את זה בתחתית ה-div הראשי של ה-TaskManager */}
+<div className="mt-10 mb-6 flex justify-center">
+  <button
+    onClick={() => {
+      dispatch({ type: "START_ROUTINE" });
+      router.push("/active-timer");        // ← ניווט
+    }}
+    className="neu-flat flex items-center gap-3 rounded-[30px] bg-primary px-12 py-5 text-white font-bold text-xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all"
+  >
+    <Play className="h-6 w-6 fill-current" />
+    בואי נתחיל!
+  </button>
+</div>
       </div>
+
+      
     </div>
   )
 }

@@ -1,229 +1,158 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react" // הוספנו
-import { useRouter } from "next/navigation" // הוספנו
-import { createBrowserClient } from '@supabase/ssr' // הוספנו
-import { RoutineProvider, useRoutine, type AppView } from "@/lib/routine-store"
-import { Onboarding } from "@/components/onboarding"
-import { ActiveTimer } from "@/components/active-timer"
-import { TaskManager } from "@/components/task-manager"
-import { Settings } from "@/components/settings"
-import { Timer, ListChecks, Settings2, Sun } from "lucide-react"
-import { cn } from "@/lib/utils"
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "../lib/supabase";
+import TimeSlotCard from "../components/TimeSlotCard";
+import Home from "../components/home";
 
-// function AppContent() {
-//   const { state, dispatch } = useRoutine()
-//   const router = useRouter()
-//   const [loading, setLoading] = useState(true)
+import { TaskManager } from "../components/task-manager";
+import { Plus, ClockCheck } from "lucide-react";
+import { useRoutine } from "@/lib/routine-store";
 
-//   const supabase = createBrowserClient(
-//     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-//     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-//   )
+interface Slot { id: string; name: string; time: number; progress: number }
 
-//   // בדיקה האם המשתמש מחובר ברגע שהדף עולה
-//   useEffect(() => {
-//     const checkUser = async () => {
-//       const { data: { session } } = await supabase.auth.getSession()
-      
-//       if (!session) {
-//         // אם אין משתמש מחובר, שלח אותו לדף הלוגין
-//         router.push('/login')
-//       } else {
-//         setLoading(false)
-//       }
-//     }
-//     checkUser()
-//   }, [router, supabase])
+export default function HomePage() {
+  const { dispatch } = useRoutine();
+  const [slots, setSlots] = useState<Slot[]>([]);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedSlotId, setSelectedSlotId] = useState<string | null>(null);
+  const router = useRouter();
 
-//   // בזמן הבדיקה, נציג מסך טעינה קטן (אופציונלי)
-//   if (loading) {
-//     return (
-//       <div className="flex min-h-screen items-center justify-center bg-background">
-//         <div className="text-primary animate-pulse font-medium">Loading...</div>
-//       </div>
-//     )
-//   }
+  const fetchData = async () => {
+    try {
+      setError(null);
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
 
-//   if (!state.onboardingComplete || state.view === "onboarding") {
-//     return <Onboarding />
-//   }
+      setUser(user);
+      if (user) {
+        const { data, error: dbError } = await supabase
+          .from("time_slots")
+          .select("id,name,time,progress,created_at")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false });
 
-//   const navItems: { view: AppView; icon: typeof Timer; label: string }[] = [
-//     { view: "dashboard", icon: Timer, label: "Timer" },
-//     { view: "tasks", icon: ListChecks, label: "Tasks" },
-//     { view: "settings", icon: Settings2, label: "Settings" },
-//   ]
+        if (dbError) throw dbError;
+        setSlots(data || []);
+      }
+    } catch (err: any) {
+      console.error("שגיאה:", err);
+      setError(err.message || "שגיאה בטעינת נתונים");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-//   return (
-//     <div className="mx-auto flex min-h-screen max-w-lg flex-col">
-//       {/* Top bar */}
-//       <header className="flex items-center justify-between px-4 py-4">
-//         <div className="flex items-center gap-2">
-//           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-//             <Sun className="h-4 w-4" strokeWidth={1.5} />
-//           </div>
-//           <span className="text-lg font-semibold text-foreground tracking-tight">
-//             Rise
-//           </span>
-//         </div>
-//         <p className="text-xs text-muted-foreground">
-//           {getGreeting()}
-//         </p>
-//       </header>
-
-//       {/* Main content */}
-//       <main className="flex-1 overflow-y-auto pb-24">
-//         {state.view === "dashboard" && <ActiveTimer />}
-//         {state.view === "tasks" && <TaskManager />}
-//         {state.view === "settings" && <Settings />}
-//       </main>
-
-//       {/* Bottom Navigation */}
-//       <nav className="fixed bottom-0 left-0 right-0 z-50">
-//         <div className="mx-auto max-w-lg px-4 pb-4">
-//           <div className="neu-flat flex items-center justify-around rounded-2xl bg-background p-2">
-//             {navItems.map(({ view, icon: Icon, label }) => (
-//               <button
-//                 key={view}
-//                 onClick={() => dispatch({ type: "SET_VIEW", payload: view })}
-//                 className={cn(
-//                   "flex flex-col items-center gap-1 rounded-xl px-6 py-2.5 transition-all",
-//                   state.view === view
-//                     ? "neu-pressed bg-background text-primary"
-//                     : "text-muted-foreground hover:text-foreground"
-//                 )}
-//                 aria-label={label}
-//                 aria-current={state.view === view ? "page" : undefined}
-//               >
-//                 <Icon className="h-5 w-5" strokeWidth={1.5} />
-//                 <span className="text-[10px] font-medium">{label}</span>
-//               </button>
-//             ))}
-//           </div>
-//         </div>
-//       </nav>
-//     </div>
-//   )
-// }
-function AppContent() {
-  const { state, dispatch } = useRoutine()
-  const router = useRouter()
-  const [loading, setLoading] = useState(true)
-
-  const supabase = createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-
-  // פונקציית התנתקות
-  const handleSignOut = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
-  }
+  useEffect(() => { fetchData(); }, []);
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      
-      if (!session) {
-        router.push('/login')
-      } else {
-        setLoading(false)
-      }
+    if (selectedSlotId) {
+      dispatch({ type: "SET_ACTIVE_SLOT", payload: selectedSlotId });
     }
-    checkUser()
-  }, [router, supabase])
+  }, [selectedSlotId, dispatch]);
+
+  const addNewSlot = () => {
+    dispatch({ type: "RESET_TASKS_TO_DEFAULTS" });
+    router.push("/onboarding");
+  };
 
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="text-primary animate-pulse font-medium">Loading...</div>
+        <div className="neu-flat rounded-3xl bg-background px-10 py-8 text-center">
+          <div className="mb-3 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+          <p className="text-sm text-muted-foreground">טוען...</p>
+        </div>
       </div>
-    )
+    );
   }
 
-  if (!state.onboardingComplete || state.view === "onboarding") {
-    return <Onboarding />
+  if (!user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="neu-flat rounded-3xl bg-background px-10 py-8 text-center">
+          <p className="text-muted-foreground">אנא <a href="/login" className="text-primary underline">התחבר</a></p>
+        </div>
+      </div>
+    );
   }
 
-  const navItems: { view: AppView; icon: typeof Timer; label: string }[] = [
-    { view: "dashboard", icon: Timer, label: "Timer" },
-    { view: "tasks", icon: ListChecks, label: "Tasks" },
-    { view: "settings", icon: Settings2, label: "Settings" },
-  ]
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="neu-flat rounded-3xl bg-background px-10 py-8 text-center">
+          <p className="text-destructive">⚠️ {error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedSlotId) {
+    return (
+      <div className="flex min-h-screen items-start justify-center bg-background px-4 py-8">
+        <div className="w-full max-w-2xl">
+          <button
+            onClick={() => setSelectedSlotId(null)}
+            className="neu-flat-sm mb-6 rounded-2xl bg-background px-5 py-2.5 text-sm font-medium text-primary transition-all hover:scale-[1.02] active:scale-[0.98]"
+          >
+            ← חזור לזמנים
+          </button>
+          <TaskManager />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-lg flex-col">
-      {/* Top bar */}
-      <header className="flex items-center justify-between px-4 py-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <Sun className="h-4 w-4" strokeWidth={1.5} />
+    <div className="flex min-h-screen flex-col items-center bg-background px-4 py-10">
+      <div className="w-full max-w-2xl">
+
+        {/* Header */}
+        <div className="neu-flat mb-8 rounded-[28px] bg-background p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.25em] text-primary/50">morning routine</p>
+              <h1 className="mt-1 text-2xl font-black text-foreground">Chik Time</h1>
+              <p className="mt-1 text-sm text-muted-foreground">בחרי זמן כדי להתחיל את היום שלך</p>
+            </div>
+            <div className="neu-pressed flex h-14 w-14 items-center justify-center rounded-2xl bg-background">
+              <ClockCheck className="h-6 w-6 text-primary" strokeWidth={1.5} />
+            </div>
           </div>
-          <span className="text-lg font-semibold text-foreground tracking-tight">
-            Rise
-          </span>
         </div>
-        
-        {/* כפתור התנתקות מעוצב בראש המסך */}
-        <div className="flex items-center gap-4">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
-            {getGreeting()}
-          </p>
-          <button 
-            onClick={handleSignOut}
-            className="text-[10px] font-bold text-muted-foreground hover:text-destructive border border-border px-2 py-1 rounded-md transition-colors"
-          >
-            LOGOUT
-          </button>
-        </div>
-      </header>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-y-auto pb-24">
-        {state.view === "dashboard" && <ActiveTimer />}
-        {state.view === "tasks" && <TaskManager />}
-        {state.view === "settings" && <Settings />}
-      </main>
-
-      {/* Navigation (נשאר אותו דבר) */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50">
-        <div className="mx-auto max-w-lg px-4 pb-4">
-          <div className="neu-flat flex items-center justify-around rounded-2xl bg-background p-2">
-            {navItems.map(({ view, icon: Icon, label }) => (
-              <button
-                key={view}
-                onClick={() => dispatch({ type: "SET_VIEW", payload: view })}
-                className={cn(
-                  "flex flex-col items-center gap-1 rounded-xl px-6 py-2.5 transition-all",
-                  state.view === view
-                    ? "neu-pressed bg-background text-primary"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <Icon className="h-5 w-5" strokeWidth={1.5} />
-                <span className="text-[10px] font-medium">{label}</span>
-              </button>
+        {/* Slots */}
+        {slots.length === 0 ? (
+          <div className="neu-flat mb-6 rounded-[24px] bg-background p-10 text-center">
+            <p className="text-muted-foreground">עדיין אין זמנים. צרי את הראשון!</p>
+          </div>
+        ) : (
+          <div className="mb-6 flex flex-col gap-4">
+            {slots.map((slot) => (
+              <TimeSlotCard
+                key={slot.id}
+                slot={slot}
+                onSelect={(id) => setSelectedSlotId(id)}
+                onDeleted={(deletedId) => setSlots((prev) => prev.filter((s) => s.id !== deletedId))}
+                onUpdate={fetchData}
+              />
             ))}
           </div>
-        </div>
-      </nav>
-    </div>
-  )
-}
-function getGreeting(): string {
-  const hour = new Date().getHours()
-  if (hour < 12) return "Good morning"
-  if (hour < 17) return "Good afternoon"
-  return "Good evening"
-}
+        )}
 
-export default function Page() {
-  return (
-    <RoutineProvider>
-      <AppContent />
-    </RoutineProvider>
-  )
+        {/* Add button */}
+        <button
+          onClick={addNewSlot}
+          className="neu-flat flex w-full items-center justify-center gap-2 rounded-[24px] bg-background px-6 py-5 text-primary transition-all hover:scale-[1.01] active:neu-pressed active:scale-[0.99]"
+        >
+          <Plus className="h-4 w-4" />
+          <span className="text-sm font-semibold">הוסיפי זמן חדש</span>
+        </button>
+
+      </div>
+    </div>
+  );
 }

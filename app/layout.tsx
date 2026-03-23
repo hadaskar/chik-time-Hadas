@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Geist_Mono } from 'next/font/google'
-import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
-import { ThemeProvider } from "next-themes"
+import { RoutineProvider } from '../lib/routine-store' // ייבוא ה-provider
+
 const dmSans = DM_Sans({
   subsets: ['latin'],
   variable: '--font-dm-sans',
@@ -10,9 +10,9 @@ const dmSans = DM_Sans({
 const _geistMono = Geist_Mono({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'Rise - Morning Routine Planner',
+  title: 'ChikTime - Plan your time, in a Chik',
   description:
-    'A calm, minimalist morning routine planner to help you start every day with intention.',
+    'Plan your time in a Chik. Build, track, and master your routines with ease.',
   generator: 'v0.app',
   icons: {
     icon: [
@@ -45,9 +45,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${dmSans.variable} font-sans antialiased`}>
-        {children}
-        <Analytics />
+      <body className={`${dmSans.variable} antialiased`}>
+        <RoutineProvider>
+          {children}
+        </RoutineProvider>
       </body>
     </html>
   )

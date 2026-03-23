@@ -70,7 +70,7 @@ export default function LoginPage() {
           
           {/* Header */}
           <div className="text-center mb-10">
-            <h1 className="text-5xl font-black tracking-tighter text-foreground mb-3 italic drop-shadow-sm">RISE</h1>
+            <h1 className="text-5xl font-black tracking-tighter text-foreground mb-3 italic drop-shadow-sm">צ'יק טיים</h1>
             <p className="text-muted-foreground text-sm font-medium">
               {isSignUp ? 'צרי חשבון חדש כדי להתחיל' : 'המלווה האישי שלך לבוקר מוצלח'}
             </p>
@@ -190,7 +190,7 @@ export default function LoginPage() {
         </div>
         
         <p className="text-center mt-8 text-[10px] text-muted-foreground/40 uppercase tracking-widest font-medium">
-          RISE © 2026 • Morning Mastery
+          Chik Time © 2026 • Morning Mastery
         </p>
       </div>
     </div>

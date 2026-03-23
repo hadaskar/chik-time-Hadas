@@ -1,202 +1,169 @@
 "use client"
-import { Sun, Moon } from "lucide-react"
-import { useTheme } from "next-themes" // את תצטרכי להתקין את זה
-import { useEffect,useMemo } from "react"
+import React from "react"
+import { useRouter } from "next/navigation"
 import { useRoutine } from "@/lib/routine-store"
-import { ProgressRing } from "@/components/progress-ring"
 import { TaskIcon } from "@/components/task-icon"
-import { Play, Pause, SkipForward, RotateCcw, ChevronRight } from "lucide-react"
+import { Check, SkipForward, Play, Pause, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Progress } from "@/components/ui/progress"
+
 export function ActiveTimer() {
-  // השתמשי בזה כדי שהצליל ייטען רק פעם אחת ולא בכל שניה
-  const audio = useMemo(() => typeof Audio !== "undefined" ? new Audio("/ding.mp3") : null, []);
+  const { state, dispatch } = useRoutine()
+  const router = useRouter()
 
-  const playSound = () => {
-    if (audio) {
-      audio.currentTime = 0;
-      audio.play().catch(e => console.log("Audio play blocked", e));
-    }
-  };
-const { theme, setTheme } = useTheme()
-  const { state, dispatch, enabledTasks, totalDuration } = useRoutine()
-
-  const currentTask = enabledTasks[state.activeTaskIndex]
-  const nextTask = enabledTasks[state.activeTaskIndex + 1]
-
-  const taskDurationSeconds = currentTask ? currentTask.duration * 60 : 0
-  const progress = taskDurationSeconds > 0 ? state.elapsedSeconds / taskDurationSeconds : 0
-  const clampedProgress = Math.min(progress, 1)
-
-  const remainingSeconds = Math.max(taskDurationSeconds - state.elapsedSeconds, 0)
-  const minutes = Math.floor(remainingSeconds / 60)
-  const seconds = remainingSeconds % 60
-
-  // Overall progress
-  const completedMinutes = enabledTasks
-    .slice(0, state.activeTaskIndex)
-    .reduce((sum, t) => sum + t.duration, 0)
-  const currentTaskProgress = currentTask
-    ? Math.min(state.elapsedSeconds / 60, currentTask.duration)
-    : 0
-  const overallProgress =
-    totalDuration > 0
-      ? ((completedMinutes + currentTaskProgress) / totalDuration) * 100
-      : 0
-
-  // Timer tick
-  useEffect(() => {
-    if (!state.isTimerRunning) return
-    const interval = setInterval(() => {
-      dispatch({ type: "TICK" })
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [state.isTimerRunning, dispatch])
-
-  // Auto-advance when task time is up
-useEffect(() => {
-  if (state.elapsedSeconds >= taskDurationSeconds && taskDurationSeconds > 0 && state.isTimerRunning) {
-    playSound(); // <--- הצליל יושמע כאן
-    dispatch({ type: "NEXT_TASK" });
+  const goToHomeSlots = () => {
+    dispatch({ type: "SET_VIEW", payload: "slots" })
+    router.push("/")
   }
-}, [state.elapsedSeconds, taskDurationSeconds, state.isTimerRunning, dispatch]);
-  const isComplete = !currentTask && state.activeTaskIndex >= enabledTasks.length
+  
+  // מקבלים את רשימת המשימות הפעילות בלבד
+  const activeTasks = state.tasks.filter((t: any) => t.enabled)
+  const currentTask = activeTasks[state.activeTaskIndex]
+  const nextTask = activeTasks[state.activeTaskIndex + 1]
 
-  if (enabledTasks.length === 0) {
+  // חישוב זמן שנותר למשימה הנוכחית
+  const totalSeconds = (currentTask?.duration || 0) * 60
+  const remainingSeconds = Math.max(0, totalSeconds - state.elapsedSeconds)
+  
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins}:${secs.toString().padStart(2, '0')}`
+  }
+
+  if (!currentTask) {
+    const totalTasks = activeTasks.length
     return (
-      <div className="flex min-h-[80vh] flex-col items-center justify-center px-4">
-        <div className="neu-flat rounded-3xl bg-background p-10 text-center">
-          <p className="text-lg font-medium text-foreground">No tasks enabled</p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Go to Tasks to add activities to your routine.
-          </p>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
+        <div className="w-full max-w-sm">
+
+          {/* Icon */}
+          <div className="mb-10 flex justify-center">
+            <div className="neu-flat flex h-28 w-28 items-center justify-center rounded-full bg-background">
+              <Check className="h-12 w-12 text-primary" strokeWidth={1.5} />
+            </div>
+          </div>
+
+          {/* Text */}
+          <div className="mb-10 text-center">
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-primary/50">routine complete</p>
+            <h2 className="text-3xl font-black text-foreground">כל הכבוד</h2>
+            <p className="mt-3 text-sm text-muted-foreground">
+              סיימת את כל {totalTasks} המשימות בהצלחה
+            </p>
+          </div>
+
+          {/* Stats */}
+          <div className="mb-8 neu-pressed rounded-[24px] bg-background p-5">
+            <div className="flex items-center justify-around">
+              <div className="text-center">
+                <p className="text-2xl font-black text-primary">{totalTasks}</p>
+                <p className="mt-1 text-xs text-muted-foreground">משימות</p>
+              </div>
+              <div className="h-10 w-px bg-border" />
+              <div className="text-center">
+                <p className="text-2xl font-black text-primary">
+                  {activeTasks.reduce((s: number, t: any) => s + t.duration, 0)}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">דקות</p>
+              </div>
+              <div className="h-10 w-px bg-border" />
+              <div className="text-center">
+                <p className="text-2xl font-black text-primary">100%</p>
+                <p className="mt-1 text-xs text-muted-foreground">הושלם</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Button */}
+          <button
+            onClick={goToHomeSlots}
+            className="neu-flat flex w-full items-center justify-center rounded-[20px] bg-background py-4 text-sm font-semibold text-primary transition-all hover:scale-[1.02] active:neu-pressed active:scale-[0.98]"
+          >
+            חזרה לדף הבית
+          </button>
+
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-[80vh] flex-col items-center justify-center px-4 py-8">
-      {/* Greeting */}
-      <p className="mb-2 text-sm font-medium uppercase tracking-widest text-muted-foreground">
-        {isComplete ? "Routine Complete" : `Task ${state.activeTaskIndex + 1} of ${enabledTasks.length}`}
-      </p>
-          <button
-  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-  className="neu-flat-sm absolute top-4 right-4 p-3 rounded-full bg-background text-foreground transition-all hover:scale-110"
->
-  {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-</button>
-      {isComplete ? (
-        <div className="flex flex-col items-center text-center animate-in fade-in-0 zoom-in-95 duration-500">
-          <div className="neu-flat mb-6 flex h-28 w-28 items-center justify-center rounded-full bg-background">
-            <svg className="h-14 w-14 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-            </svg>
-          </div>
+    <div className="flex min-h-screen flex-col items-center bg-background px-4 py-8">
+      <div className="w-full max-w-sm">
 
-          <h2 className="mb-2 text-2xl font-semibold text-foreground">
-            Well Done
-          </h2>
-          <p className="mb-8 text-sm text-muted-foreground">
-            You completed your entire morning routine.
-          </p>
+      {/* 1. הטיימר הראשי */}
+      <div className="flex justify-center py-8">
+        <div className="relative flex items-center justify-center w-56 h-56 rounded-full bg-background shadow-[16px_16px_32px_#bebebe,-16px_-16px_32px_#ffffff]">
+          <div className="text-center">
+            <span className="text-5xl font-black text-foreground tabular-nums">
+              {formatTime(remainingSeconds)}
+            </span>
+            <p className="text-xs text-muted-foreground mt-2 font-medium tracking-widest uppercase">
+              נותרו דקות
+            </p>
+          </div>
+          <svg className="absolute inset-0 w-full h-full -rotate-90">
+            <circle cx="112" cy="112" r="104" fill="none" stroke="currentColor" strokeWidth="6" className="text-primary/10" />
+            <circle cx="112" cy="112" r="104" fill="none" stroke="currentColor" strokeWidth="6"
+              strokeDasharray={654} strokeDashoffset={654 - (654 * (remainingSeconds / (totalSeconds || 1)))}
+              strokeLinecap="round" className="text-primary transition-all duration-1000" />
+          </svg>
+        </div>
+      </div>
+
+      {/* 2. המשימה הנוכחית */}
+      <div className="neu-pressed p-5 rounded-[24px] bg-background mb-4">
+        <div className="flex items-center gap-4">
+          <div className="neu-flat flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-background">
+            <TaskIcon iconKey={currentTask.icon} className="w-6 h-6 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <span className="text-xs font-bold text-primary/60 uppercase tracking-wider">עכשיו</span>
+            <h2 className="text-lg font-bold text-foreground truncate">{currentTask.name}</h2>
+          </div>
           <button
-            onClick={() => dispatch({ type: "RESET_TIMER" })}
-            className="neu-flat flex items-center gap-2 rounded-2xl bg-background px-8 py-4 text-sm font-medium text-foreground transition-all hover:scale-[1.02] active:scale-[0.98]"
+            onClick={() => dispatch({ type: "NEXT_TASK" })}
+            className="neu-flat flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-background text-primary transition-all hover:scale-[1.05] active:neu-pressed active:scale-[0.95]"
           >
-            <RotateCcw className="h-4 w-4" />
-            Start Again
+            <Check className="w-5 h-5" />
           </button>
         </div>
-      ) : (
-        <>
-          {/* Current task name */}
-          <h2 className="mb-8 text-2xl font-semibold text-foreground text-balance text-center">
-            {currentTask?.name}
-          </h2>
+      </div>
 
-          {/* Progress Ring */}
-          <div className="neu-flat mb-8 rounded-full bg-background p-6">
-            <ProgressRing progress={clampedProgress} size={200} strokeWidth={10}>
-              <div className="flex flex-col items-center gap-1">
-                <TaskIcon
-                  iconKey={currentTask?.icon || "sparkles"}
-                  className="mb-2 h-8 w-8 text-primary"
-                  strokeWidth={1.5}
-                />
-                <span className="text-3xl font-semibold tabular-nums text-foreground">
-                  {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
-                </span>
-                <span className="text-xs text-muted-foreground">remaining</span>
-              </div>
-            </ProgressRing>
-          </div>
-
-          {/* Controls */}
-          <div className="mb-8 flex items-center gap-4">
-            <button
-              onClick={() => dispatch({ type: "RESET_TIMER" })}
-              className="neu-flat-sm flex h-12 w-12 items-center justify-center rounded-full bg-background text-muted-foreground transition-all hover:scale-[1.05] active:scale-[0.95]"
-              aria-label="Reset timer"
-            >
-              <RotateCcw className="h-5 w-5" />
-            </button>
-
-            <button
-              onClick={() =>
-                dispatch({ type: state.isTimerRunning ? "PAUSE_TIMER" : "START_TIMER" })
-              }
-              className="neu-flat flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground transition-all hover:scale-[1.05] active:scale-[0.95]"
-              aria-label={state.isTimerRunning ? "Pause" : "Play"}
-            >
-              {state.isTimerRunning ? (
-                <Pause className="h-7 w-7" fill="currentColor" />
-              ) : (
-                <Play className="h-7 w-7 ml-0.5" fill="currentColor" />
-              )}
-            </button>
-
-            <button
-              onClick={() => {playSound(); dispatch({ type: "NEXT_TASK" })}}
-              className="neu-flat-sm flex h-12 w-12 items-center justify-center rounded-full bg-background text-muted-foreground transition-all hover:scale-[1.05] active:scale-[0.95]"
-              aria-label="Skip to next task"
-            >
-              <SkipForward className="h-5 w-5" />
-            </button>
-          </div>
-
-          {/* Overall progress */}
-          <div className="mb-6 w-full max-w-xs">
-            <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Overall Progress</span>
-              <span className="tabular-nums">{Math.round(overallProgress)}%</span>
+      {/* 3. משימות הבאות */}
+      <div className="mb-6">
+        <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground/60">המשימות הבאות</p>
+        <div className="flex flex-col gap-2">
+          {activeTasks.slice(state.activeTaskIndex + 1, state.activeTaskIndex + 4).map((task: any) => (
+            <div key={task.id} className="neu-flat flex items-center gap-3 rounded-[18px] bg-background px-4 py-3 opacity-60">
+              <TaskIcon iconKey={task.icon} className="w-4 h-4 text-muted-foreground" />
+              <span className="flex-1 text-sm text-muted-foreground">{task.name}</span>
+              <span className="text-xs text-muted-foreground tabular-nums">{task.duration} דק׳</span>
             </div>
-            <div className="neu-pressed-sm rounded-full p-1">
-              <Progress value={overallProgress} className="h-2" />
-            </div>
-          </div>
-
-          {/* Next Task Preview */}
-          {nextTask && (
-            <div className="neu-flat-sm w-full max-w-xs rounded-2xl bg-background p-4">
-              <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Up Next
-              </p>
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/15 text-accent">
-                  <TaskIcon iconKey={nextTask.icon} className="h-5 w-5" strokeWidth={1.5} />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">{nextTask.name}</p>
-                  <p className="text-xs text-muted-foreground">{nextTask.duration} min</p>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground/50" />
-              </div>
-            </div>
+          ))}
+          {activeTasks.length <= state.activeTaskIndex + 1 && (
+            <p className="text-center text-xs text-muted-foreground py-3">זו המשימה האחרונה</p>
           )}
-        </>
-      )}
+        </div>
+      </div>
+
+      {/* כפתורי שליטה */}
+      <div className="flex justify-center gap-5 pb-6">
+        <button onClick={goToHomeSlots} className="neu-flat flex h-14 w-14 items-center justify-center rounded-full bg-background text-muted-foreground transition-all hover:scale-[1.05] active:neu-pressed">
+          <X className="w-5 h-5" />
+        </button>
+        <button
+          onClick={() => dispatch({ type: state.isTimerRunning ? "PAUSE_TIMER" : "START_TIMER" })}
+          className="neu-flat flex h-14 w-14 items-center justify-center rounded-full bg-background text-primary transition-all hover:scale-[1.05] active:neu-pressed"
+        >
+          {state.isTimerRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+        </button>
+        <button onClick={() => dispatch({ type: "NEXT_TASK" })} className="neu-flat flex h-14 w-14 items-center justify-center rounded-full bg-background text-muted-foreground transition-all hover:scale-[1.05] active:neu-pressed">
+          <SkipForward className="w-5 h-5" />
+        </button>
+      </div>
+
+      </div>
     </div>
   )
 }

@@ -1,21 +1,23 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRoutine } from "@/lib/routine-store"
 import { TaskIcon } from "@/components/task-icon"
 import { Slider } from "@/components/ui/slider"
 import { Sun, ArrowRight, ArrowLeft, Clock, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-export function Onboarding() {
+export function 
+Onboarding() {
   const { state, dispatch } = useRoutine()
-  const [step, setStep] = useState(0)
-
+  // ✅ שנה: התחל מ-step 1 אם כבר סיים onboarding, אחרת התחל מ-step 0
+  const [step, setStep] = useState(state.onboardingComplete ? 1 : 0)
+  
   const steps = [
     { title: "Welcome", subtitle: "Let's build your ideal morning" },
     { title: "Pick Activities", subtitle: "Select what matters to you" },
     { title: "Set Durations", subtitle: "How long for each task?" },
-    { title: "Ready to Rise", subtitle: "Your morning is set" },
+    { title: "Ready to Chik Time", subtitle: "Your morning is set" },
   ]
 
   const enabledTasks = state.tasks.filter((t) => t.enabled)
@@ -52,7 +54,7 @@ export function Onboarding() {
               <Sun className="h-12 w-12 text-accent" strokeWidth={1.5} />
             </div>
             <h1 className="mb-3 text-3xl font-semibold tracking-tight text-foreground text-balance">
-              Rise
+              Chik Time
             </h1>
             <p className="mb-2 text-lg text-muted-foreground leading-relaxed">
               {steps[0].subtitle}
@@ -121,7 +123,13 @@ export function Onboarding() {
 
             <div className="mt-6 flex items-center justify-between">
               <button
-                onClick={() => setStep(0)}
+                onClick={() => {
+                  if (!state.onboardingComplete) {
+                    setStep(0) // חזור ל-Welcome אם לא סיים onboarding
+                  } else {
+                    window.history.back() // חזור לדף הקודם אם סיים onboarding
+                  }
+                }}
                 className="neu-flat-sm flex items-center gap-1 rounded-xl bg-background px-4 py-3 text-sm text-muted-foreground transition-all hover:scale-[1.02] active:scale-[0.98]"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
@@ -247,7 +255,13 @@ export function Onboarding() {
                 Back
               </button>
               <button
-                onClick={() => dispatch({ type: "COMPLETE_ONBOARDING" })}
+                onClick={() => {
+                  dispatch({ type: "COMPLETE_ONBOARDING" })
+                  // ✅ הוסף הפניה חזרה לדף הבית אחרי שמירה
+                  if (typeof window !== 'undefined') {
+                    window.location.href = '/'
+                  }
+                }}
                 className="neu-flat flex-1 rounded-2xl bg-primary px-6 py-4 text-sm font-semibold text-primary-foreground transition-all hover:scale-[1.02] active:scale-[0.98]"
               >
                 Start My Morning

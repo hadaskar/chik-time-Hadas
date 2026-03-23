@@ -1,10 +1,16 @@
-
 "use client"
-
 import React, { createContext, useContext, useReducer, useCallback, useEffect, type ReactNode } from "react"
 import { supabase } from "@/lib/supabase"
 
-// --- 1. הוספת export (מתקן את image_15ed41) ---
+// --- 1. הגדרות טיפוסים (Exports הכרחיים למניעת שגיאות בדפים אחרים) ---
+export interface TimeSlot {
+  id: string;
+  name: string;
+  user_id?: string;
+  created_at?: string;
+  tasks?: { count: number }[]; 
+}
+
 export interface NotificationSettings {
   enabled: boolean
   sound: string
@@ -17,107 +23,139 @@ export interface RoutineTask {
   icon: string
   duration: number
   enabled: boolean
+  time_slot_id?: string // קישור ל-Slot
 }
 
-export type AppView = "onboarding" | "dashboard" | "tasks" | "timer" | "settings"
+export type AppView = "onboarding" | "slots" | "dashboard" | "tasks" | "timer" | "settings"
 
 export interface AppState {
   view: AppView
   onboardingComplete: boolean
   tasks: RoutineTask[]
+  slots: TimeSlot[]           // רשימת הזמנים
+  activeSlotId: string | null // הזמן הנבחר
   activeTaskIndex: number
   isTimerRunning: boolean
   elapsedSeconds: number
   notifications: NotificationSettings
   wakeUpTime: string
   isNewUser: boolean
+  isLoadingTasks: boolean
 }
-// ודאי שהייבוא של DEFAULT_TASKS נמצא כאן או שהגדרת אותו למעלה
+
 export const DEFAULT_TASKS: RoutineTask[] = [
-  { id: "1", name: "Brush Teeth", icon: "sparkles", duration: 5, enabled: true },
-  { id: "2", name: "Shower", icon: "droplets", duration: 10, enabled: true },
-  { id: "3", name: "Get Dressed", icon: "shirt", duration: 5, enabled: true },
-  { id: "4", name: "Make Breakfast", icon: "coffee", duration: 15, enabled: true },
-  { id: "5", name: "Meditate", icon: "brain", duration: 10, enabled: false },
-  { id: "6", name: "Exercise", icon: "dumbbell", duration: 20, enabled: false },
-  { id: "7", name: "Journal", icon: "book-open", duration: 10, enabled: false },
-  { id: "8", name: "Read News", icon: "newspaper", duration: 10, enabled: false },
+  { id: "1", name: "צחצוח שיניים", icon: "sparkles", duration: 5, enabled: true },
+  { id: "2", name: "מקלחת", icon: "droplets", duration: 10, enabled: true },
+  { id: "3", name: "התלבשות", icon: "shirt", duration: 5, enabled: true },
+  { id: "4", name: "ארוחת בוקר", icon: "coffee", duration: 15, enabled: true },
+  { id: "5", name: "מדיטציה", icon: "brain", duration: 10, enabled: false },
+  { id: "6", name: "אימון גופני", icon: "dumbbell", duration: 20, enabled: false },
+  { id: "7", name: "יומן אישי", icon: "book-open", duration: 10, enabled: false },
+  { id: "8", name: "קריאת חדשות", icon: "newspaper", duration: 10, enabled: false },
 ];
 
+const cloneDefaultTasks = () => DEFAULT_TASKS.map((task) => ({ ...task }))
 
 const INITIAL_STATE: AppState = {
-view: "onboarding",
-  onboardingComplete: false,
-  tasks: DEFAULT_TASKS, // טעינה מיידית מהקוד, לא מהשרת!
+  view: "onboarding",        // מתחילים ב-onboarding (שזה דף ה-Get Started)
+  onboardingComplete: false, // מסמנים שעדיין לא סיימנו
+  tasks: cloneDefaultTasks(),
+  slots: [],
+  activeSlotId: null,
   activeTaskIndex: 0,
   isTimerRunning: false,
   elapsedSeconds: 0,
   notifications: { enabled: true, sound: "gentle-chime", reminderBefore: 30 },
   wakeUpTime: "07:00",
-  isNewUser: false
+  isNewUser: true,
+  isLoadingTasks: false
 }
 
-
+// --- 2. Reducer (כולל התמיכה ב-Slots) ---
 function reducer(state: AppState, action: any): AppState {
   switch (action.type) {
     case "SET_VIEW": 
       return { ...state, view: action.payload };
-// בתוך ה-switch ב-routine-store.ts
-case "SET_NEW_USER":
-  return { ...state, isNewUser: action.payload };
-case "SET_WAKE_UP_TIME":
-  return { ...state, wakeUpTime: action.payload };
-
-case "UPDATE_NOTIFICATIONS":
-  return {
-    ...state,
-    notifications: {
-      ...state.notifications,
-      ...action.payload,
-    },
-  };
-    // זה הכפתור של "התחל את היום שלך" - מחזירים אותו למצב שעבד
+    case "SET_SLOTS":
+      return { ...state, slots: action.payload };
+    case "SET_ACTIVE_SLOT":
+      return { ...state, activeSlotId: action.payload, view: "tasks", tasks: [], isLoadingTasks: true };
+    case "RESET_TASKS_TO_DEFAULTS":
+      return { ...state, tasks: cloneDefaultTasks(), activeSlotId: null, isLoadingTasks: false };
+    case "SET_LOADING_TASKS":
+      return { ...state, isLoadingTasks: action.payload };
+    case "SET_NEW_USER":
+      return { ...state, isNewUser: action.payload };
+    case "SET_WAKE_UP_TIME":
+      return { ...state, wakeUpTime: action.payload };
+    case "UPDATE_NOTIFICATIONS":
+      return { ...state, notifications: { ...state.notifications, ...action.payload } };
     case "START_ROUTINE": 
-      return { 
-        ...state, 
-        view: "dashboard", 
-        isTimerRunning: true, 
-        activeTaskIndex: 0, 
-        elapsedSeconds: 0 
-      };
-
-    // מוסיפים את אלו בנפרד עבור הכפתורים בתוך דף הטיימר
+      return { ...state, view: "dashboard", isTimerRunning: true, activeTaskIndex: 0, elapsedSeconds: 0 };
     case "START_TIMER":
       return { ...state, isTimerRunning: true };
-
     case "PAUSE_TIMER":
       return { ...state, isTimerRunning: false };
-
     case "RESET_TIMER":
       return { ...state, elapsedSeconds: 0, isTimerRunning: false };
-
     case "NEXT_TASK":
-      return { 
-        ...state, 
-        activeTaskIndex: state.activeTaskIndex + 1, 
-        elapsedSeconds: 0 
-      };
-
+      return { ...state, activeTaskIndex: state.activeTaskIndex + 1, elapsedSeconds: 0 };
     case "TICK": 
       return { ...state, elapsedSeconds: state.elapsedSeconds + 1 };
-
     case "COMPLETE_ONBOARDING":
-      return { ...state, onboardingComplete: true, view: "dashboard" };
-
+      return { ...state, onboardingComplete: true, view: "slots" }; // עובר לבחירת זמן
     case "REORDER_TASKS": 
       return { ...state, tasks: action.payload };
-
+    case "ADD_TASK":
+      return { ...state, tasks: [...state.tasks, action.payload] };
+    case "REMOVE_TASK":
+      return { ...state, tasks: state.tasks.filter((t) => t.id !== action.payload) };
+    case "UPDATE_TASK_NAME":
+      return {
+        ...state,
+        tasks: state.tasks.map((t) =>
+          t.id === action.payload.id ? { ...t, name: action.payload.name } : t
+        ),
+      };
     case "TOGGLE_TASK":
       return {
         ...state,
         tasks: state.tasks.map((t) => t.id === action.payload ? { ...t, enabled: !t.enabled } : t),
       };
+      case "COMPLETE_WELCOME":
+  return {
+    ...state,
+    view: "slots", // עובר לדף הבית (השמש והשגרות)
+    onboardingComplete: true // מסמן שראינו את דף הפתיחה
+  };
+      // כאן את מדביקה את הקוד החדש:
+  case "CREATE_AND_START_SLOT":
+    const enabledTasksForNewSlot = state.tasks.filter(t => t.enabled);
+    const newSlotId = Math.random().toString(36).substr(2, 9);
+    
+    const createdSlot = {
+      id: newSlotId,
+      name: "שגרה חדשה", 
+      tasks: [{ count: enabledTasksForNewSlot.length }]
+    };
 
+    return {
+      ...state,
+      slots: [...state.slots, createdSlot],
+      activeSlotId: newSlotId,
+      activeTaskIndex: 0,
+      elapsedSeconds: 0,
+      isTimerRunning: true,
+      onboardingComplete: true,
+view: "slots"    };
+      case "RESET_ONBOARDING_TASKS":
+  return {
+    ...state,
+    // הופך את כל המשימות ללא פעילות כדי להתחיל "דף חלק" ב-Onboarding
+    tasks: state.tasks.map(t => ({ ...t, enabled: false })),
+    onboardingComplete: false,
+    view: "onboarding"
+  };
     case "UPDATE_TASK_DURATION":
       return {
         ...state,
@@ -125,11 +163,11 @@ case "UPDATE_NOTIFICATIONS":
           t.id === action.payload.id ? { ...t, duration: action.payload.duration } : t
         ),
       };
-
     default: 
       return state;
   }
 }
+
 interface RoutineContextType {
   state: AppState
   dispatch: (action: any) => void
@@ -141,124 +179,166 @@ const RoutineContext = createContext<RoutineContextType | null>(null)
 
 export function RoutineProvider({ children }: { children: ReactNode }) {
   const [state, rawDispatch] = useReducer(reducer, INITIAL_STATE)
+  const stateRef = React.useRef(state)
+  useEffect(() => { stateRef.current = state }, [state])
 
-
-
-useEffect(() => {
-  let interval: NodeJS.Timeout
-  
-  // כאן היה השינוי: החלפנו מ-"timer" ל-"dashboard"
-  // כי זה השם של ה-view שבו הקומפוננטה ActiveTimer מוצגת
-  if (state.isTimerRunning && state.view === "dashboard") { 
-    interval = setInterval(() => {
-      rawDispatch({ type: "TICK" })
-    }, 1000)
-  }
-  
-  return () => clearInterval(interval)
-}, [state.isTimerRunning, state.view])
-  // טעינה מ-Supabase (עם שמות העמודות מהתמונות שלך)
-useEffect(() => {
-  const fetchTasks = async () => {
-    // 1. בדיקת משתמש מחובר
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-
-    // 2. שליפת המשימות מהטבלה
-    const { data, error } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('task_id', { ascending: true }) // סדר לפי המזהה הקבוע שלנו
-
-    if (data && data.length > 0) {
-      // --- המהלך המנצח ---
-      // אנחנו הופכים את הנתונים מהפורמט של ה-DB לפורמט שה-UI מכיר
-      const formattedTasks = data.map(t => ({
-        ...t,
-        id: t.task_id // מחזירים את "1", "2" וכו' לשדה ה-id כדי שה-Checkbox יעבוד
-      }))
-
-      rawDispatch({ type: "REORDER_TASKS", payload: formattedTasks })
-      rawDispatch({ type: "SET_NEW_USER", payload: false })
-      
-      console.log("נתונים נטענו בהצלחה מהשרת:", formattedTasks.length, "משימות")
-    } else {
-      // משתמש חדש או טבלה ריקה - נשתמש בברירת המחדל שכבר קיימת ב-Initial State
-      rawDispatch({ type: "SET_NEW_USER", payload: true })
-      
-      // אם משום מה ה-State ריק לגמרי, נטעין את הדיפולט
-      if (state.tasks.length === 0) {
-        rawDispatch({ type: "REORDER_TASKS", payload: DEFAULT_TASKS })
-      }
+  // טיימר
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    if (state.isTimerRunning && state.view === "dashboard") { 
+      interval = setInterval(() => {
+        rawDispatch({ type: "TICK" })
+      }, 1000)
     }
+    return () => clearInterval(interval)
+  }, [state.isTimerRunning, state.view])
 
-    if (error) {
-      console.error("שגיאה במשיכת נתונים:", error.message)
-    }
-  }
+  // טעינת זמנים (Slots)
+  useEffect(() => {
+    const fetchSlots = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("time_slots")
+        .select("*, tasks(count)")
+        .eq("user_id", user.id);
+      if (data) rawDispatch({ type: "SET_SLOTS", payload: data });
+    };
+    fetchSlots();
+  }, []);
 
-  fetchTasks()
-}, []) // רץ פעם אחת בטעינה ראשונית של ה-Provider/ רץ רק פעם אחת בטעינה ראשונית
-const dispatch = useCallback(async (action: any) => {
-  // 1. עדכון ה-UI מיידית (שה-V יידלק במסך)
-  rawDispatch(action);
+  // טעינת משימות סלקטיבית
+  useEffect(() => {
+    if (!state.activeSlotId) return;                             // ← עצירה מוקדמת
 
-  // 2. סנכרון לשרת רק כשלוחצים על "התחל רוטינה"
- // בתוך ה-dispatch ב-RoutineProvider
-// אנחנו רוצים לסנכרן גם ב-START_ROUTINE וגם ב-COMPLETE_ONBOARDING
-if (action.type === "START_ROUTINE" || action.type === "COMPLETE_ONBOARDING") {
-    
-      // ... שאר קוד הסנכרון שכבר כתבנו עם ה-filter וה-map ...
-    try {
+    const fetchTasks = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        console.error("שגיאה: אין משתמש מחובר!");
+        rawDispatch({ type: "REORDER_TASKS", payload: [] });
+        rawDispatch({ type: "SET_LOADING_TASKS", payload: false });
         return;
       }
 
-      // סינון המשימות שסומנו ב-V
-      const tasksToSync = state.tasks
-        .filter(task => task.enabled === true)
-        .map((task) => ({
-          user_id: user.id,
-          task_id: String(task.id), // המזהה "1", "2" וכו'
-          name: task.name,
-          icon: task.icon,
-          duration: task.duration,
-          enabled: true
-        }));
-
-      // --- כאן הבדיקה (DEBUG) שביקשתי ---
-      console.log("DEBUG: המשימות שאני שולחת לסנכרון:", tasksToSync);
-
-      if (tasksToSync.length === 0) {
-        console.warn("אזהרה: המערך ריק! אין משימות עם enabled: true");
-        return;
-      }
-      // ---------------------------------
+      console.log("[fetchTasks] fetching for slot:", state.activeSlotId, "user:", user.id);
 
       const { data, error } = await supabase
-        .from('tasks')
-        .upsert(tasksToSync, { 
-          onConflict: 'user_id, task_id' 
-        })
-        .select(); // הוספנו select כדי לראות מה חזר
+        .from("tasks")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("time_slot_id", state.activeSlotId);
+
+      console.log("[fetchTasks] result:", { data, error });
 
       if (error) {
-        console.error("שגיאת סופאבייס (RLS או מבנה):", error.message);
-      } else {
-        console.log("הצלחה! הנתונים שנשמרו במסד:", data);
-        if (state.isNewUser) {
-          rawDispatch({ type: "SET_NEW_USER", payload: false });
-        }
+        console.error("fetchTasks error:", error.message);
+        rawDispatch({ type: "REORDER_TASKS", payload: [] });
+        rawDispatch({ type: "SET_LOADING_TASKS", payload: false });
+        return;
       }
+      if (data && data.length > 0) {
+        const formatted = data.map((t) => ({ ...t, id: t.task_id || t.id }));
+        rawDispatch({ type: "REORDER_TASKS", payload: formatted });
+        rawDispatch({ type: "SET_NEW_USER", payload: false });
+      } else {
+        rawDispatch({ type: "REORDER_TASKS", payload: [] });
+      }
+      rawDispatch({ type: "SET_LOADING_TASKS", payload: false });
+    };
+    fetchTasks();
+  }, [state.activeSlotId]);
 
-    } catch (err) {
-      console.error("שגיאה קריטית בתהליך השליחה:", err);
+  const dispatch = useCallback(async (action: any) => {
+    rawDispatch(action);
+    const currentState = stateRef.current;
+
+    // סינכרון משימות רגיל (עכשיו כולל time_slot_id ב‑onConflict)
+    if (
+      action.type === "START_ROUTINE"
+    ) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const tasksToSync = currentState.tasks
+          .filter((t) => t.enabled)
+          .map((t) => ({
+            user_id: user.id,
+            task_id: String(t.id),
+            name: t.name,
+            icon: t.icon,
+            duration: t.duration,
+            enabled: true,
+            time_slot_id: currentState.activeSlotId || action.newSlotId || null,
+          }));
+
+        if (tasksToSync.length > 0) {
+          await supabase
+            .from("tasks")
+            .upsert(tasksToSync, {
+              onConflict: "user_id,task_id",
+            });
+        }
+      } catch (err) {
+        console.error("Sync error:", err);
+      }
     }
-  }
-}, [state.tasks, state.isNewUser]);
+
+    // 🌟 ניהול יצירת slot חדש + ניווט
+    if (action.type === "CREATE_AND_START_SLOT") {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const enabledTasksForNewSlot = currentState.tasks.filter((t) => t.enabled);
+        const newSlotId = Math.random().toString(36).substr(2, 9);
+
+        const { data: newSlotData, error } = await supabase
+          .from("time_slots")
+          .insert({
+            id: newSlotId,
+            name: "שגרה חדשה",
+            user_id: user.id,
+            created_at: new Date().toISOString(),
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error("Error saving new slot:", error);
+          return;
+        }
+
+        const tasksToSync = enabledTasksForNewSlot.map((t) => ({
+          user_id: user.id,
+          task_id: crypto.randomUUID(),
+          name: t.name,
+          icon: t.icon,
+          duration: t.duration,
+          enabled: true,
+          time_slot_id: newSlotId,
+        }));
+
+        if (tasksToSync.length > 0) {
+          await supabase
+            .from("tasks")
+            .upsert(tasksToSync, {
+              onConflict: "user_id,task_id",
+            });
+        }
+
+        rawDispatch({
+          type: "SET_SLOTS",
+          payload: [
+            ...currentState.slots,
+            { ...newSlotData, tasks: [{ count: enabledTasksForNewSlot.length }] },
+          ],
+        });
+        rawDispatch({ type: "SET_ACTIVE_SLOT", payload: newSlotId });
+      } catch (err) {
+        console.error("Error creating slot:", err);
+      }
+    }
+  }, []);
 
   const enabledTasks = state.tasks.filter((t) => t.enabled)
   const totalDuration = enabledTasks.reduce((sum, t) => sum + t.duration, 0)
