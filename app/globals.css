@@ -43,6 +43,40 @@
   --sunrise-gradient: linear-gradient(135deg, #B8D4E3 0%, #E8A87C 50%, #F5C6A0 100%);
 }
 
+/* ─── Dark mode variables ───────────────────────────────────── */
+.dark {
+  --background: #1C2128;
+  --foreground: #E6EDF3;
+  --card: #21272E;
+  --card-foreground: #E6EDF3;
+  --popover: #21272E;
+  --popover-foreground: #E6EDF3;
+  --primary: #6FA3C7;
+  --primary-foreground: #FFFFFF;
+  --secondary: #2D3741;
+  --secondary-foreground: #E6EDF3;
+  --muted: #2D3741;
+  --muted-foreground: #8B9BB0;
+  --accent: #E8A87C;
+  --accent-foreground: #1C2128;
+  --destructive: #E17055;
+  --destructive-foreground: #FFFFFF;
+  --border: #30373F;
+  --input: #30373F;
+  --ring: #6FA3C7;
+  --sidebar: #21272E;
+  --sidebar-foreground: #E6EDF3;
+  --sidebar-primary: #6FA3C7;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #2D3741;
+  --sidebar-accent-foreground: #E6EDF3;
+  --sidebar-border: #30373F;
+  --sidebar-ring: #6FA3C7;
+
+  --neu-shadow-light: #242C33;
+  --neu-shadow-dark: #141A1F;
+}
+
 @theme inline {
   --font-sans: 'DM Sans', 'Geist', 'Geist Fallback';
   --font-mono: 'Geist Mono', 'Geist Mono Fallback';

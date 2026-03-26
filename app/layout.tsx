@@ -2,6 +2,9 @@ import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { RoutineProvider } from '../lib/routine-store' // ייבוא ה-provider
+import { ThemeProvider } from '@/components/theme-provider'
+import { ThemeToggle } from '@/components/theme-toggle'
+import { BrandLogo } from '@/components/brand-logo'
 
 const dmSans = DM_Sans({
   subsets: ['latin'],
@@ -44,11 +47,24 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${dmSans.variable} antialiased`}>
-        <RoutineProvider>
-          {children}
-        </RoutineProvider>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
+          <RoutineProvider>
+            <div className="flex min-h-screen flex-col">
+              <div className="flex-1">
+                {children}
+              </div>
+              <footer className="w-full py-5 text-center">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/30 select-none">
+                  Chik Time @ 2026
+                </p>
+              </footer>
+            </div>
+            <BrandLogo />
+            <ThemeToggle />
+          </RoutineProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

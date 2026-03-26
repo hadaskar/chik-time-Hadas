@@ -1,12 +1,23 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { Clock3, Trash2, ListChecks } from 'lucide-react';
+import { Clock3, ChevronLeft, Trash2 } from 'lucide-react';
+
 interface Slot {
   id: string;
   name: string;
   time: number;
   progress: number;
 }
+
+const ACCENTS = [
+  'bg-primary/70',
+  'bg-accent/70',
+  'bg-[#81C9A3]/70',
+  'bg-[#B8A4D4]/70',
+];
+
+const hashId = (id: string) =>
+  id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
 
 export default function TimeSlotCard({
   slot,
@@ -19,61 +30,36 @@ export default function TimeSlotCard({
   onUpdate?: () => void | Promise<void>;
   onDeleted?: (id: string) => void;
 }) {
-  const [additionalTime, setAdditionalTime] = useState(0);
-  const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const addTime = async () => {
-    if (additionalTime <= 0) return alert('הזן זמן חיובי');
-    setLoading(true);
-    const newTime = slot.time + additionalTime;
+  const accent = ACCENTS[hashId(slot.id) % ACCENTS.length];
 
-    const { error } = await supabase
-      .from('time_slots')
-      .update({
-        time: newTime,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', slot.id);
-
-    setLoading(false);
-    if (error) {
-      console.error('שגיאה בשמירה:', error);
-      alert('שגיאה בשמירה לדטאבייס: ' + error.message);
-    } else {
-      alert('✅ זמן נוסף נשמר בהצלחה!');
-      setAdditionalTime(0);
-      onUpdate?.();
-    }
+  const formatTime = (mins: number) => {
+    if (mins < 60) return `${mins} דק׳`;
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return m > 0 ? `${h} שע׳ ${m} דק׳` : `${h} שע׳`;
   };
 
   const deleteSlot = async () => {
-    const shouldDelete = window.confirm('למחוק את הזמן הזה וכל המשימות שלו?');
-    if (!shouldDelete) return;
-
     setDeleting(true);
     try {
-      // מחיקת משימות של הזמן
       const { error: tasksError } = await supabase
         .from('tasks')
         .delete()
         .eq('time_slot_id', slot.id);
-
       if (tasksError) throw tasksError;
 
-      // מחיקת הזמן עצמו – select() מחזיר את השורות שנמחקו בפועל
       const { data: deleted, error: slotError } = await supabase
         .from('time_slots')
         .delete()
         .eq('id', slot.id)
         .select('id');
-
       if (slotError) throw slotError;
 
       if (!deleted || deleted.length === 0) {
-        throw new Error(
-          'השרת לא מחק את הזמן – כנראה חסרה מדיניות DELETE ב-RLS. הוסיפי אותה בדשבורד של Supabase.'
-        );
+        throw new Error('השרת לא מחק את הזמן – בדקי מדיניות DELETE ב-RLS.');
       }
 
       onDeleted?.(slot.id);
@@ -83,41 +69,63 @@ export default function TimeSlotCard({
       alert('שגיאה במחיקת הזמן: ' + error.message);
     } finally {
       setDeleting(false);
+      setConfirmDelete(false);
     }
   };
 
   return (
-    <div className="neu-flat overflow-hidden rounded-[24px] bg-background">
-      {/* Top border — primary only */}
-      <div className="h-[3px] w-full rounded-t-[24px] bg-primary/30" />
+    <div className="group neu-flat rounded-[22px] bg-background overflow-hidden transition-all hover:scale-[1.005]">
+      <div className="flex">
+        {/* Coloured left stripe */}
+        <div className={`w-1 shrink-0 ${accent}`} />
 
-      <div className="p-5">
-        {/* Name + time */}
-        <div className="mb-5">
-          <h3 className="mb-2 text-xl font-bold text-foreground">{slot.name}</h3>
-          <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/8 px-3 py-1.5">
-            <Clock3 className="h-3.5 w-3.5 text-primary" />
-            <span className="text-sm font-semibold text-primary">{slot.time} דקות</span>
+        <div className="flex flex-1 items-center gap-4 px-5 py-4">
+          {/* Name + time */}
+          <div className="flex-1 min-w-0">
+            <h3 className="truncate text-base font-bold text-foreground leading-snug">
+              {slot.name}
+            </h3>
+            <div className="mt-1.5 flex items-center gap-1.5">
+              <Clock3 className="h-3 w-3 text-primary/60" />
+              <span className="text-xs font-semibold text-primary/80">{formatTime(slot.time)}</span>
+            </div>
           </div>
-        </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => onSelect?.(slot.id)}
-            className="neu-flat-sm flex flex-1 items-center justify-center gap-2 rounded-2xl bg-background py-2.5 text-sm font-semibold text-primary transition-all hover:scale-[1.02] active:scale-[0.98]"
-          >
-            <ListChecks className="h-4 w-4" />
-            משימות
-          </button>
-          <button
-            onClick={deleteSlot}
-            disabled={deleting}
-            className="neu-flat-sm flex items-center justify-center gap-1.5 rounded-2xl bg-background px-3.5 py-2.5 text-sm text-muted-foreground transition-all hover:scale-[1.02] hover:text-foreground active:scale-[0.98] disabled:opacity-50"
-          >
-            <Trash2 className="h-4 w-4" />
-            {deleting ? 'מוחק...' : 'מחק'}
-          </button>
+          {/* Actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            {confirmDelete ? (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="rounded-xl px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  ביטול
+                </button>
+                <button
+                  onClick={deleteSlot}
+                  disabled={deleting}
+                  className="rounded-xl bg-destructive/10 px-3 py-1.5 text-xs font-bold text-destructive transition-all hover:bg-destructive/20 disabled:opacity-50"
+                >
+                  {deleting ? '...' : 'מחק'}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDelete(true)}
+                className="neu-flat-sm flex h-8 w-8 items-center justify-center rounded-xl bg-background text-muted-foreground/40 opacity-0 transition-all group-hover:opacity-100 hover:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+
+            <button
+              onClick={() => onSelect?.(slot.id)}
+              className="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white shadow-[0_3px_12px_rgba(111,163,199,0.35)] transition-all hover:shadow-[0_5px_18px_rgba(111,163,199,0.45)] hover:scale-[1.04] active:scale-[0.97]"
+            >
+              פתיחה
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

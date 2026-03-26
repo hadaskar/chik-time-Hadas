@@ -33,6 +33,12 @@ export function TaskManager() {
   const [newTaskName, setNewTaskName] = useState("")
   const [newTaskIcon, setNewTaskIcon] = useState("sparkles")
   const [newTaskDuration, setNewTaskDuration] = useState(10)
+  const [showAllIcons, setShowAllIcons] = useState(false)
+  const [justAdded, setJustAdded] = useState(false)
+  const [isAdding, setIsAdding] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
+  const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set())
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingName, setEditingName] = useState("")
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
@@ -42,9 +48,11 @@ export function TaskManager() {
 const handleAddTask = async () => {
   if (!newTaskName.trim()) return
   if (!state.activeSlotId) return
+  if (isAdding) return
+  setIsAdding(true)
   
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
+  if (!user) { setIsAdding(false); return }
 
   // יוצרים מזהה ייחודי חדש למשימה
   const newTaskId = crypto.randomUUID()
@@ -65,18 +73,21 @@ const handleAddTask = async () => {
     .select()
 
   if (!error && data) {
-    // חשוב: אנחנו מעדכנים את ה-Store עם ה-task_id כשדה ה-id
     dispatch({ type: "ADD_TASK", payload: { ...data[0], id: data[0].task_id } })
     setNewTaskName("")
-    setShowAddForm(false)
+    setJustAdded(true)
+    setTimeout(() => setJustAdded(false), 1200)
   } else {
     console.error("Error adding task:", error?.message)
   }
+  setIsAdding(false)
 }
 
   // 3. עדכון שם משימה ב-Database
 const saveEdit = async () => {
+  if (isSaving) return
   if (editingId && editingName.trim()) {
+  setIsSaving(true)
     let query = supabase
       .from('tasks')
       .update({ name: editingName.trim() })
@@ -95,11 +106,14 @@ const saveEdit = async () => {
       })
     }
   }
+  setIsSaving(false)
   setEditingId(null)
 }
 
   // 4. מחיקת משימה מה-Database
 const handleDeleteTask = async (id: string) => {
+  if (deletingIds.has(id)) return
+  setDeletingIds(prev => new Set(prev).add(id))
   let query = supabase
     .from('tasks')
     .delete()
@@ -115,6 +129,7 @@ const handleDeleteTask = async (id: string) => {
     dispatch({ type: "REMOVE_TASK", payload: id })
   } else {
     console.error("Delete failed:", error.message)
+    setDeletingIds(prev => { const s = new Set(prev); s.delete(id); return s })
   }
 }
 
@@ -203,64 +218,73 @@ const handleDeleteTask = async (id: string) => {
         </button>
       </div>
 
-      {/* Add Task Form - JSX ללא שינוי */}
+      {/* Add Task Form — compact */}
       {showAddForm && (
-        <div className="mb-6 neu-flat rounded-2xl bg-background p-5 animate-in fade-in-0 slide-in-from-top-2 duration-300">
-          <h3 className="mb-4 text-sm font-semibold text-foreground">Add Custom Task</h3>
-          <input
-            type="text"
-            value={newTaskName}
-            onChange={(e) => setNewTaskName(e.target.value)}
-            placeholder="Task name..."
-            className="mb-4 w-full rounded-xl bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50 neu-pressed-sm focus:outline-none"
-            onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
-          />
+        <div className="mb-6 neu-flat rounded-2xl bg-background p-4 space-y-3 animate-in fade-in-0 slide-in-from-top-2 duration-300">
+          {/* Name + submit button */}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={newTaskName}
+              onChange={(e) => setNewTaskName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
+              placeholder="שם הפעילות..."
+              className="neu-pressed-sm flex-1 rounded-xl bg-background px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+            />
+            <button
+              onClick={handleAddTask}
+              disabled={!newTaskName.trim() || justAdded || isAdding}
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white transition-all disabled:opacity-40",
+                justAdded ? "bg-green-500" : "bg-primary"
+              )}
+            >
+              {justAdded ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            </button>
+          </div>
 
-          <p className="mb-2 text-xs font-medium text-muted-foreground">Choose Icon</p>
-          <div className="mb-4 flex flex-wrap gap-2">
-            {availableIcons.map((icon) => (
+          {/* Icon picker */}
+          <div className="flex flex-wrap gap-1.5">
+            {(showAllIcons ? availableIcons : availableIcons.slice(0, 8)).map((icon) => (
               <button
                 key={icon}
                 onClick={() => setNewTaskIcon(icon)}
                 className={cn(
-                  "flex h-10 w-10 items-center justify-center rounded-xl transition-all",
+                  "flex h-8 w-8 items-center justify-center rounded-lg transition-all",
                   newTaskIcon === icon
                     ? "neu-pressed bg-background text-primary"
-                    : "neu-flat-sm bg-background text-muted-foreground hover:text-foreground"
+                    : "neu-flat-sm bg-background text-muted-foreground hover:text-primary"
                 )}
               >
-                <TaskIcon iconKey={icon} className="h-5 w-5" strokeWidth={1.5} />
+                <TaskIcon iconKey={icon} className="h-3.5 w-3.5" strokeWidth={1.5} />
               </button>
             ))}
+            <button
+              onClick={() => setShowAllIcons(!showAllIcons)}
+              className="flex h-8 items-center justify-center rounded-lg px-2 text-[10px] font-medium text-primary/60 hover:text-primary"
+            >
+              {showAllIcons ? 'פחות ▲' : 'עוד ▼'}
+            </button>
           </div>
 
-          <div className="mb-4">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-xs font-medium text-muted-foreground">Duration</p>
-              <span className="text-sm font-semibold text-foreground tabular-nums">{newTaskDuration} min</span>
+          {/* Duration */}
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground shrink-0">משך זמן</span>
+            <div className="flex-1">
+              <Slider
+                value={[newTaskDuration]}
+                onValueChange={([val]) => setNewTaskDuration(val)}
+                min={1} max={60} step={1}
+              />
             </div>
-            <Slider
-              value={[newTaskDuration]}
-              onValueChange={([val]) => setNewTaskDuration(val)}
-              min={1}
-              max={60}
-              step={1}
-            />
+            <span className="text-xs font-bold text-foreground w-12 text-left tabular-nums">{newTaskDuration} דק׳</span>
           </div>
-
-          <button
-            onClick={handleAddTask}
-            disabled={!newTaskName.trim()}
-            className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-40"
-          >
-            Add Task
-          </button>
         </div>
       )}
 
       {/* Task List - JSX ללא שינוי */}
       <div className="flex flex-col gap-3">
-        {state.tasks.map((task, index) => (
+        {[...state.tasks].sort((a, b) => Number(b.enabled) - Number(a.enabled)).map((task, index) => (
           <div
             key={task.id}
             draggable
@@ -301,7 +325,7 @@ const handleDeleteTask = async (id: string) => {
                       className="flex-1 rounded-lg bg-transparent px-2 py-1 text-sm text-foreground neu-pressed-sm focus:outline-none"
                       autoFocus
                     />
-                    <button onClick={saveEdit} className="text-primary"><Check className="h-4 w-4" /></button>
+                    <button onClick={saveEdit} disabled={isSaving} className={cn("text-primary", isSaving && "opacity-40 cursor-not-allowed")}><Check className="h-4 w-4" /></button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
@@ -318,6 +342,8 @@ const handleDeleteTask = async (id: string) => {
               {/* Toggle - מעדכן ב-Database */}
               <button
                 onClick={async () => {
+                  if (togglingIds.has(task.id)) return
+                  setTogglingIds(prev => new Set(prev).add(task.id))
                   dispatch({ type: "TOGGLE_TASK", payload: task.id })
                   let query = supabase
                     .from('tasks')
@@ -329,10 +355,13 @@ const handleDeleteTask = async (id: string) => {
                   }
 
                   await query
+                  setTogglingIds(prev => { const s = new Set(prev); s.delete(task.id); return s })
                 }}
+                disabled={togglingIds.has(task.id)}
                 className={cn(
                   "flex h-8 w-8 items-center justify-center rounded-lg transition-all",
-                  task.enabled ? "bg-primary/15 text-primary" : "bg-muted/30 text-muted-foreground/40"
+                  task.enabled ? "bg-primary/15 text-primary" : "bg-muted/30 text-muted-foreground/40",
+                  togglingIds.has(task.id) && "opacity-50 cursor-not-allowed"
                 )}
               >
                 <Check className="h-4 w-4" />
@@ -340,7 +369,11 @@ const handleDeleteTask = async (id: string) => {
 
               <button
                 onClick={() => handleDeleteTask(task.id)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground/30 transition-colors hover:text-destructive"
+                disabled={deletingIds.has(task.id)}
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground/30 transition-colors hover:text-destructive",
+                  deletingIds.has(task.id) && "opacity-40 cursor-not-allowed"
+                )}
               >
                 <Trash2 className="h-4 w-4" />
               </button>
@@ -370,8 +403,7 @@ const handleDeleteTask = async (id: string) => {
     className="neu-flat flex items-center gap-3 rounded-[30px] bg-primary px-12 py-5 text-white font-bold text-xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all"
   >
     <Play className="h-6 w-6 fill-current" />
-    בואי נתחיל!
-  </button>
+בוא נתחיל  </button>
 </div>
       </div>
 

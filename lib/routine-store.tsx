@@ -44,14 +44,10 @@ export interface AppState {
 }
 
 export const DEFAULT_TASKS: RoutineTask[] = [
-  { id: "1", name: "צחצוח שיניים", icon: "sparkles", duration: 5, enabled: true },
-  { id: "2", name: "מקלחת", icon: "droplets", duration: 10, enabled: true },
-  { id: "3", name: "התלבשות", icon: "shirt", duration: 5, enabled: true },
-  { id: "4", name: "ארוחת בוקר", icon: "coffee", duration: 15, enabled: true },
-  { id: "5", name: "מדיטציה", icon: "brain", duration: 10, enabled: false },
-  { id: "6", name: "אימון גופני", icon: "dumbbell", duration: 20, enabled: false },
-  { id: "7", name: "יומן אישי", icon: "book-open", duration: 10, enabled: false },
-  { id: "8", name: "קריאת חדשות", icon: "newspaper", duration: 10, enabled: false },
+  { id: "1", name: "ארגון הבית", icon: "droplets", duration: 30, enabled: false },
+  { id: "2", name: "תנועה וכושר", icon: "dumbbell", duration: 15, enabled: true },
+  { id: "3", name: "מדיטציה / נשימות", icon: "brain", duration: 10, enabled: false },
+  { id: "4", name: "מטלה לימודית", icon: "book-open", duration: 30, enabled: false },
 ];
 
 const cloneDefaultTasks = () => DEFAULT_TASKS.map((task) => ({ ...task }))
@@ -106,8 +102,13 @@ function reducer(state: AppState, action: any): AppState {
       return { ...state, onboardingComplete: true, view: "slots" }; // עובר לבחירת זמן
     case "REORDER_TASKS": 
       return { ...state, tasks: action.payload };
-    case "ADD_TASK":
-      return { ...state, tasks: [...state.tasks, action.payload] };
+    case "ADD_TASK": {
+      const lastEnabledIdx = state.tasks.map(t => t.enabled).lastIndexOf(true);
+      const insertAt = lastEnabledIdx + 1;
+      const newTasks = [...state.tasks];
+      newTasks.splice(insertAt, 0, action.payload);
+      return { ...state, tasks: newTasks };
+    }
     case "REMOVE_TASK":
       return { ...state, tasks: state.tasks.filter((t) => t.id !== action.payload) };
     case "UPDATE_TASK_NAME":

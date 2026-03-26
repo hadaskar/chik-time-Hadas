@@ -13,6 +13,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [forgotMode, setForgotMode] = useState(false)
+  const [resetSent, setResetSent] = useState(false)
   const router = useRouter()
 
   const supabase = createBrowserClient(
@@ -27,6 +29,22 @@ export default function LoginPage() {
       options: { redirectTo: `${window.location.origin}/auth/callback` },
     })
     if (error) setErrorMsg(error.message)
+  }
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!email) { setErrorMsg('הכניסי את כתובת האימייל'); return }
+    setLoading(true)
+    setErrorMsg(null)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setLoading(false)
+    if (error) {
+      setErrorMsg(error.message)
+    } else {
+      setResetSent(true)
+    }
   }
 
   const handleEmailAuth = async (e: React.FormEvent) => {
@@ -64,9 +82,25 @@ export default function LoginPage() {
       />
       <div className="absolute inset-0 bg-white/65 backdrop-blur-[3px]" />
 
-      {/* Card */}
+      {/* Card — always light */}
       <div className="relative z-10 w-full max-w-sm">
-        <div className="neu-flat rounded-[2rem] bg-background p-8">
+        <div
+          className="rounded-[2rem] p-8"
+          style={{
+            background: "#F0EDE8",
+            boxShadow: "10px 10px 20px #d1cec9, -10px -10px 20px #ffffff",
+            colorScheme: "light",
+            "--background": "#F0EDE8",
+            "--foreground": "#2D3436",
+            "--muted-foreground": "#636e72",
+            "--border": "#dbd8d3",
+            "--primary": "#6FA3C7",
+            "--primary-foreground": "#ffffff",
+            "--destructive": "#e17055",
+            "--neu-shadow-light": "#ffffff",
+            "--neu-shadow-dark": "#d1cec9",
+          } as React.CSSProperties}
+        >
 
           {/* Header */}
           <div className="mb-8 text-center">
@@ -74,11 +108,63 @@ export default function LoginPage() {
               Chik<span className="text-primary"> Time</span>
             </h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              {isSignUp ? '��� ����� ��� ��� ������' : '������ ����� ��� ����� �����'}
+              {forgotMode ? 'נשלח לך קישור לאיפוס הסיסמה' : isSignUp ? 'בוא הרשם לציק טיים, ככה תתכנן את הזמן שלך בציק!' : 'התחבר לציק טיים, לתכנון המשימה שלך בציק! '}
             </p>
           </div>
 
           <div className="space-y-3">
+
+            {forgotMode ? (
+              /* Forgot password form */
+              resetSent ? (
+                <div className="text-center py-4">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+                    <Mail className="h-6 w-6 text-primary" />
+                  </div>
+                  <p className="text-sm font-semibold text-foreground mb-1">נשלח בהצלחה!</p>
+                  <p className="text-xs text-muted-foreground mb-6">בדוק את תיבת המייל שלך — שלחנו קישור לאיפוס הסיסמה</p>
+                  <button
+                    onClick={() => { setForgotMode(false); setResetSent(false); setErrorMsg(null) }}
+                    className="text-xs text-primary font-semibold underline underline-offset-2"
+                  >
+                    חזרה להתחברות
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleForgotPassword} className="space-y-3">
+                  {errorMsg && (
+                    <div className="rounded-[14px] bg-destructive/10 px-4 py-3 text-center text-xs text-destructive">
+                      {errorMsg}
+                    </div>
+                  )}
+                  <div className="neu-pressed flex items-center gap-3 rounded-[16px] bg-background px-4 py-3">
+                    <Mail className="h-4 w-4 shrink-0 text-primary/60" />
+                    <input
+                      type="email"
+                      required
+                      placeholder="הקלד אמייל"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="flex-1 bg-transparent text-sm text-[#2D3436] outline-none placeholder:text-[#636e72]/60"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="group mt-2 flex w-full items-center justify-center gap-3 rounded-full bg-primary py-4 text-sm font-bold text-white shadow-[0_8px_30px_rgba(111,163,199,0.4)] transition-all hover:scale-[1.03] active:scale-[0.97] disabled:opacity-70"
+                  >
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'שלח קישור לאיפוס'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setForgotMode(false); setErrorMsg(null) }}
+                    className="w-full text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    חזרה להתחברות
+                  </button>
+                </form>
+              )
+            ) : (<>
 
             {/* Google */}
             <button
@@ -86,13 +172,13 @@ export default function LoginPage() {
               className="neu-flat flex w-full items-center justify-center gap-3 rounded-[16px] bg-background py-4 text-sm font-semibold text-foreground transition-all hover:scale-[1.02] active:neu-pressed active:scale-[0.98]"
             >
               <Chrome className="h-4 w-4" />
-              ���� �� Google
+                Google המשך עם 
             </button>
 
             {/* Divider */}
             <div className="relative flex items-center gap-3 py-1">
               <div className="h-px flex-1 bg-border" />
-              <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60">�� ������� ������</span>
+              <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60">או באמצעות אימייל</span>
               <div className="h-px flex-1 bg-border" />
             </div>
 
@@ -112,10 +198,10 @@ export default function LoginPage() {
                   <input
                     type="text"
                     required={isSignUp}
-                    placeholder="�� ���"
+                    placeholder="שם מלא"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                    className="flex-1 bg-transparent text-sm text-[#2D3436] outline-none placeholder:text-[#636e72]/60"
                   />
                 </div>
               )}
@@ -125,10 +211,10 @@ export default function LoginPage() {
                 <input
                   type="email"
                   required
-                  placeholder="������"
+                  placeholder="הקלד אמייל"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                  className="flex-1 bg-transparent text-sm text-[#2D3436] outline-none placeholder:text-[#636e72]/60"
                 />
               </div>
 
@@ -137,10 +223,10 @@ export default function LoginPage() {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   required
-                  placeholder="�����"
+                  placeholder="סיסמה"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/50"
+                  className="flex-1 bg-transparent text-sm text-[#2D3436] outline-none placeholder:text-[#636e72]/60"
                 />
                 <button
                   type="button"
@@ -151,6 +237,16 @@ export default function LoginPage() {
                 </button>
               </div>
 
+              {!isSignUp && (
+                <button
+                  type="button"
+                  onClick={() => { setForgotMode(true); setErrorMsg(null) }}
+                  className="w-full text-left text-[11px] text-muted-foreground/60 hover:text-primary transition-colors px-1"
+                >
+                  שכחתי סיסמה
+                </button>
+              )}
+
               <button
                 type="submit"
                 disabled={loading}
@@ -160,7 +256,7 @@ export default function LoginPage() {
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <>
-                    <span>{isSignUp ? '��� �����' : '����� ������'}</span>
+                    <span>{isSignUp ? 'צור חשבון' : 'כניסה למערכת'}</span>
                     <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
                   </>
                 )}
@@ -173,16 +269,17 @@ export default function LoginPage() {
               className="w-full pt-1 text-center text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               {isSignUp
-                ? <span>��� �� �� �����? <span className="text-primary font-semibold underline underline-offset-2">������ ���</span></span>
-                : <span>��� �� �����? <span className="text-primary font-semibold underline underline-offset-2">��� ����� ���</span></span>
+                ? <span>רשומים?  <span className="text-primary font-semibold underline underline-offset-2"> התחבר כאן</span></span>
+                : <span> עדיין לא רשומים? <span className="text-primary font-semibold underline underline-offset-2">  בוא נרשם!</span></span>
               }
             </button>
 
+            </>)}
           </div>
         </div>
 
         <p className="mt-6 text-center text-[10px] uppercase tracking-widest text-muted-foreground/40">
-          Chik Time � 2026
+          Chik Time @ 2026
         </p>
       </div>
 
