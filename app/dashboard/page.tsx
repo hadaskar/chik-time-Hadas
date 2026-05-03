@@ -61,7 +61,7 @@ export default function DashboardPage() {
   }, [loading, user, router]);
 
   useEffect(() => {
-    if (selectedSlotId) dispatch({ type: "SET_ACTIVE_SLOT", payload: selectedSlotId });
+    dispatch({ type: "SET_ACTIVE_SLOT", payload: selectedSlotId });
   }, [selectedSlotId, dispatch]);
 
   const addNewSlot = () => {

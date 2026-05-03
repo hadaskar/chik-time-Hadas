@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useRoutine } from "@/lib/routine-store"
 import { TaskIcon } from "@/components/task-icon"
-import { Check, SkipForward, Play, Pause, X, Coffee } from "lucide-react"
+import { Check, SkipForward, Play, Pause, X, Coffee, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 
@@ -11,6 +11,57 @@ export function ActiveTimer() {
   const { state, dispatch } = useRoutine()
   const router = useRouter()
   const [firstName, setFirstName] = useState('')
+  const dingRef = useRef<HTMLAudioElement | null>(null)
+  const relaxRef = useRef<HTMLAudioElement | null>(null)
+  const countdownRef = useRef<HTMLAudioElement | null>(null)
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
+
+  // Wake Lock — מונע מהמסך להיכבות ומהטאב להירדם
+  useEffect(() => {
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockRef.current = await navigator.wakeLock.request('screen')
+        }
+      } catch {}
+    }
+    requestWakeLock()
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') requestWakeLock()
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      wakeLockRef.current?.release().catch(() => {})
+    }
+  }, [])
+
+  useEffect(() => {
+    dingRef.current = new Audio('/ding.mp3')
+    relaxRef.current = new Audio('/picturewall-relax-piano-268564.mp3')
+    countdownRef.current = new Audio('/amishabhatnagar-smartphone-camera-timer-397368.mp3')
+  }, [])
+
+  const playDing = () => {
+    if (relaxRef.current) { relaxRef.current.pause(); relaxRef.current.currentTime = 0 }
+    if (countdownRef.current) { countdownRef.current.pause(); countdownRef.current.currentTime = 0 }
+    if (dingRef.current) {
+      dingRef.current.currentTime = 0
+      dingRef.current.play().catch(() => {})
+    }
+  }
+
+  const playRelax = () => {
+    if (dingRef.current) { dingRef.current.pause(); dingRef.current.currentTime = 0 }
+    if (countdownRef.current) { countdownRef.current.pause(); countdownRef.current.currentTime = 0 }
+    if (relaxRef.current) {
+      relaxRef.current.currentTime = 0
+      relaxRef.current.volume = 0.4
+      relaxRef.current.play().catch(() => {})
+    }
+  }
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -33,11 +84,7 @@ export function ActiveTimer() {
       breakIntervalRef.current = setInterval(() => {
         setBreakRemaining(prev => {
           if (prev <= 1) {
-            // Break finished — move to next task
             clearInterval(breakIntervalRef.current!)
-            setIsOnBreak(false)
-            dispatch({ type: "NEXT_TASK" })
-            dispatch({ type: "START_TIMER" })
             return 0
           }
           return prev - 1
@@ -49,17 +96,50 @@ export function ActiveTimer() {
     }
   }, [isOnBreak, breakRemaining > 0]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // When break finishes (remaining hits 0), move to next task
+  useEffect(() => {
+    if (isOnBreak && breakRemaining === 0) {
+      setIsOnBreak(false)
+      dispatch({ type: "NEXT_TASK" })
+      dispatch({ type: "START_TIMER" })
+      playDing()
+    }
+  }, [isOnBreak, breakRemaining]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fade out relax sound in last 5 seconds of break
+  useEffect(() => {
+    if (!isOnBreak || !relaxRef.current) return
+    if (breakRemaining <= 5 && breakRemaining > 0) {
+      relaxRef.current.volume = Math.max(0, (breakRemaining / 5) * 0.4)
+    }
+  }, [isOnBreak, breakRemaining])
+
+  // Pre-unlock countdown audio on first user interaction
+  const unlockCountdown = useCallback(() => {
+    if (countdownRef.current) {
+      countdownRef.current.volume = 0
+      countdownRef.current.play().then(() => {
+        countdownRef.current!.pause()
+        countdownRef.current!.currentTime = 0
+        countdownRef.current!.volume = 1
+      }).catch(() => {})
+    }
+  }, [])
+
   // Handle task completion with optional break
   const handleCompleteTask = useCallback(() => {
+    unlockCountdown()
     if (breakMinutes > 0) {
       // Pause main timer, start break
       dispatch({ type: "PAUSE_TIMER" })
       setBreakRemaining(breakMinutes * 60)
       setIsOnBreak(true)
+      playRelax()
     } else {
+      playDing()
       dispatch({ type: "NEXT_TASK" })
     }
-  }, [breakMinutes, dispatch])
+  }, [breakMinutes, dispatch, unlockCountdown])
 
   const skipBreak = useCallback(() => {
     if (breakIntervalRef.current) clearInterval(breakIntervalRef.current)
@@ -67,6 +147,7 @@ export function ActiveTimer() {
     setBreakRemaining(0)
     dispatch({ type: "NEXT_TASK" })
     dispatch({ type: "START_TIMER" })
+    playDing()
   }, [dispatch])
 
   const selectBreak = (mins: number) => {
@@ -97,6 +178,25 @@ export function ActiveTimer() {
   // חישוב זמן שנותר למשימה הנוכחית
   const totalSeconds = (currentTask?.duration || 0) * 60
   const remainingSeconds = Math.max(0, totalSeconds - state.elapsedSeconds)
+
+  // Countdown sound — play at last 3 seconds
+  useEffect(() => {
+    if (!state.isTimerRunning || isOnBreak || !currentTask) return
+    if (remainingSeconds === 3 && totalSeconds > 3) {
+      if (countdownRef.current) {
+        countdownRef.current.currentTime = 0
+        countdownRef.current.play().catch(() => {})
+      }
+    }
+  }, [remainingSeconds, state.isTimerRunning, isOnBreak, currentTask, totalSeconds])
+
+  // Auto-complete task when timer reaches 0
+  useEffect(() => {
+    if (!state.isTimerRunning || isOnBreak || !currentTask) return
+    if (remainingSeconds === 0 && totalSeconds > 0) {
+      handleCompleteTask()
+    }
+  }, [remainingSeconds, state.isTimerRunning, isOnBreak, currentTask, totalSeconds, handleCompleteTask])
 
   // חישוב זמן כולל שנשאר לכל המשימות (כולל הפסקות)
   const remainingTasks = activeTasks.length - state.activeTaskIndex - 1
@@ -179,7 +279,7 @@ export function ActiveTimer() {
 
           {/* Break timer circle */}
           <div className="flex justify-center py-8">
-            <div className="relative flex items-center justify-center w-48 h-48 rounded-full bg-background shadow-[12px_12px_24px_#bebebe,-12px_-12px_24px_#ffffff]">
+            <div className="relative flex items-center justify-center w-48 h-48 rounded-full bg-background shadow-[8px_8px_20px_rgba(0,0,0,0.15),-6px_-6px_16px_rgba(255,255,255,0.06)]">
               <div className="text-center">
                 <Coffee className="mx-auto mb-2 h-6 w-6 text-primary/50" />
                 <span className="text-4xl font-black text-foreground tabular-nums">
@@ -222,10 +322,17 @@ export function ActiveTimer() {
       <div className="w-full max-w-sm">
 
       {/* ── Header ── */}
-      <div className="pt-8 pb-6">
-        {/* Logo row */}
-        <div className="flex items-center justify-between mb-5">
-          <div />
+      <div className="pt-8 pb-4">
+        {/* Top row: greeting + close */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-muted-foreground">
+              {firstName ? `היי ${firstName}` : 'היי'} 👋
+            </p>
+            <p className="text-lg font-black text-foreground">
+              {activeTasks.length} משימות
+            </p>
+          </div>
           <button
             onClick={goToHomeSlots}
             className="neu-flat-sm flex h-9 w-9 items-center justify-center rounded-xl bg-background text-muted-foreground transition-all hover:scale-[1.05] hover:text-primary active:neu-pressed active:scale-[0.95]"
@@ -233,20 +340,9 @@ export function ActiveTimer() {
             <X className="h-4 w-4" />
           </button>
         </div>
-
-        {/* Greeting */}
-        <div className="neu-pressed rounded-[20px] bg-background px-5 py-4">
-          <p className="text-xs text-muted-foreground/70 mb-0.5">
-            {firstName ? ` ${firstName}` : ''} 👋
-          </p>
-          <p className="text-base font-black text-foreground">
-  
-   {activeTasks.length}   Tasks 
-          </p>
-        </div>
       </div>
       <div className="flex justify-center py-8">
-        <div className="relative flex items-center justify-center w-56 h-56 rounded-full bg-background shadow-[16px_16px_32px_#bebebe,-16px_-16px_32px_#ffffff]">
+        <div className="relative flex items-center justify-center w-56 h-56 rounded-full bg-background shadow-[8px_8px_20px_rgba(0,0,0,0.15),-6px_-6px_16px_rgba(255,255,255,0.06)]">
           <div className="text-center">
             <span className="text-5xl font-black text-foreground tabular-nums">
               {formatTime(remainingSeconds)}
@@ -360,6 +456,15 @@ export function ActiveTimer() {
       
       {/* כפתורי שליטה */}
       <div className="flex justify-center gap-5 pb-8">
+        <button
+          onClick={() => {
+            dispatch({ type: "PAUSE_TIMER" })
+            dispatch({ type: "RESTART_ROUTINE" })
+          }}
+          className="neu-flat flex h-16 w-16 items-center justify-center rounded-full bg-background text-muted-foreground transition-all hover:scale-[1.05] active:neu-pressed"
+        >
+          <RotateCcw className="w-6 h-6" />
+        </button>
         <button
           onClick={() => dispatch({ type: state.isTimerRunning ? "PAUSE_TIMER" : "START_TIMER" })}
           className="neu-flat flex h-16 w-16 items-center justify-center rounded-full bg-background text-primary transition-all hover:scale-[1.05] active:neu-pressed"

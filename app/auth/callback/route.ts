@@ -30,5 +30,5 @@ export async function GET(request: Request) {
     }
 
     const next = searchParams.get('next')
-    return NextResponse.redirect(next ? `${origin}${next}` : origin)
+    return NextResponse.redirect(next ? `${origin}${next}` : `${origin}/dashboard`)
 }

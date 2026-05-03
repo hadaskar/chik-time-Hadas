@@ -68,10 +68,13 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div
+        style={{ background: "#F0EDE8", colorScheme: "light", minHeight: "100vh" }}
+        className="flex items-center justify-center"
+      >
         <div className="text-center">
-          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
-          <p className="text-xs font-medium text-muted-foreground tracking-wide">טוען...</p>
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-[3px] border-[#6FA3C7]/20 border-t-[#6FA3C7]" />
+          <p className="text-xs font-medium tracking-wide" style={{ color: "#636e72" }}>טוען...</p>
         </div>
       </div>
     );

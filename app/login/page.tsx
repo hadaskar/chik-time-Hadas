@@ -37,7 +37,7 @@ export default function LoginPage() {
     setLoading(true)
     setErrorMsg(null)
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
     })
     setLoading(false)
     if (error) {
@@ -78,23 +78,29 @@ export default function LoginPage() {
       {/* Background image */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: "url('/nattanan23-clock-2696234_1920.jpg')" }}
+        style={{
+          backgroundImage: "url('/‏‏istockphoto-1353518626-612x612 - עותק.jpg')",
+          filter: "contrast(1.05) saturate(1.05) brightness(1.25)",
+        }}
       />
-      <div className="absolute inset-0 bg-white/65 backdrop-blur-[3px]" />
+      <div className="absolute inset-0" style={{ background: "rgba(240,237,232,0.18)" }} />
+      <div className="absolute inset-0 backdrop-blur-[8px]" />
 
       {/* Card — always light */}
       <div className="relative z-10 w-full max-w-sm">
         <div
           className="rounded-[2rem] p-8"
           style={{
-            background: "#F0EDE8",
-            boxShadow: "10px 10px 20px #d1cec9, -10px -10px 20px #ffffff",
+            background: "rgba(245,243,240,0.92)",
+            backdropFilter: "blur(20px) saturate(1.6)",
+            WebkitBackdropFilter: "blur(20px) saturate(1.6)",
+            boxShadow: "0 0 0 1px rgba(255,255,255,0.6), 0 20px 60px rgba(0,0,0,0.14), 0 4px 16px rgba(0,0,0,0.08)",
             colorScheme: "light",
             "--background": "#F0EDE8",
-            "--foreground": "#2D3436",
-            "--muted-foreground": "#636e72",
-            "--border": "#dbd8d3",
-            "--primary": "#6FA3C7",
+            "--foreground": "#1a2330",
+            "--muted-foreground": "#6b7280",
+            "--border": "#e2dfd9",
+            "--primary": "#5b93b8",
             "--primary-foreground": "#ffffff",
             "--destructive": "#e17055",
             "--neu-shadow-light": "#ffffff",
@@ -103,12 +109,12 @@ export default function LoginPage() {
         >
 
           {/* Header */}
-          <div className="mb-8 text-center">
-            <h1 className="text-4xl font-black tracking-tight text-foreground">
-              Chik<span className="text-primary"> Time</span>
+          <div className="mb-7 text-center">
+            <h1 className="text-[2rem] font-black tracking-tight" style={{ color: "#1a2330" }}>
+              Chik<span style={{ color: "#5b93b8" }}> Time</span>
             </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {forgotMode ? 'נשלח לך קישור לאיפוס הסיסמה' : isSignUp ? 'בוא הרשם לציק טיים, ככה תתכנן את הזמן שלך בציק!' : 'התחבר לציק טיים, לתכנון המשימה שלך בציק! '}
+            <p className="mt-1.5 text-[13px] leading-relaxed" style={{ color: "#6b7280" }}>
+              {forgotMode ? 'נשלח לך קישור לאיפוס הסיסמה' : isSignUp ? 'צור חשבון חינמי ותתחיל לנהל את הזמן שלך' : 'ברוך הבא — התחבר לחשבון שלך'}
             </p>
           </div>
 
@@ -122,7 +128,7 @@ export default function LoginPage() {
                     <Mail className="h-6 w-6 text-primary" />
                   </div>
                   <p className="text-sm font-semibold text-foreground mb-1">נשלח בהצלחה!</p>
-                  <p className="text-xs text-muted-foreground mb-6">בדוק את תיבת המייל שלך — שלחנו קישור לאיפוס הסיסמה</p>
+                  <p className="text-xs text-muted-foreground mb-6">בדוק את תיבת המייל שלך — שלחנו קישור לאיפוס הסיסמה<br/><span style={{color:"#9ca3af"}}>לא רואה? בדוק בתיקיית הספאם</span></p>
                   <button
                     onClick={() => { setForgotMode(false); setResetSent(false); setErrorMsg(null) }}
                     className="text-xs text-primary font-semibold underline underline-offset-2"
@@ -151,10 +157,14 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="group mt-2 flex w-full items-center justify-center gap-3 rounded-full bg-primary py-4 text-sm font-bold text-white shadow-[0_8px_30px_rgba(111,163,199,0.4)] transition-all hover:scale-[1.03] active:scale-[0.97] disabled:opacity-70"
+                    className="group mt-2 flex w-full items-center justify-center gap-3 rounded-full py-3.5 text-[13px] font-bold text-white transition-all hover:scale-[1.03] active:scale-[0.97] disabled:opacity-70"
+                    style={{ background: "linear-gradient(135deg, #5b93b8 0%, #3d7499 100%)", boxShadow: "0 6px 24px rgba(91,147,184,0.45)" }}
                   >
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'שלח קישור לאיפוס'}
                   </button>
+                  <p className="text-center text-[11px]" style={{ color: "#9ca3af" }}>
+                    המייל עלול להגיע לתיקיית הספאם
+                  </p>
                   <button
                     type="button"
                     onClick={() => { setForgotMode(false); setErrorMsg(null) }}
@@ -169,17 +179,17 @@ export default function LoginPage() {
             {/* Google */}
             <button
               onClick={handleGoogleLogin}
-              className="neu-flat flex w-full items-center justify-center gap-3 rounded-[16px] bg-background py-4 text-sm font-semibold text-foreground transition-all hover:scale-[1.02] active:neu-pressed active:scale-[0.98]"
+              className="neu-flat flex w-full items-center justify-center gap-3 rounded-[14px] bg-background py-3.5 text-[13px] font-semibold text-foreground transition-all hover:scale-[1.02] active:neu-pressed active:scale-[0.98]"
             >
-              <Chrome className="h-4 w-4" />
+              <Chrome className="h-[18px] w-[18px]" />
                 Google המשך עם 
             </button>
 
             {/* Divider */}
-            <div className="relative flex items-center gap-3 py-1">
-              <div className="h-px flex-1 bg-border" />
-              <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground/60">או באמצעות אימייל</span>
-              <div className="h-px flex-1 bg-border" />
+            <div className="relative flex items-center gap-3 py-0.5">
+              <div className="h-px flex-1" style={{ background: "rgba(0,0,0,0.08)" }} />
+              <span className="text-[10px] font-medium tracking-widest" style={{ color: "#9ca3af" }}>או באמצעות אימייל</span>
+              <div className="h-px flex-1" style={{ background: "rgba(0,0,0,0.08)" }} />
             </div>
 
             {/* Error */}
@@ -250,7 +260,8 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="group mt-2 flex w-full items-center justify-center gap-3 rounded-full bg-primary py-4 text-sm font-bold text-white shadow-[0_8px_30px_rgba(111,163,199,0.4)] transition-all hover:scale-[1.03] hover:shadow-[0_12px_40px_rgba(111,163,199,0.55)] active:scale-[0.97] disabled:opacity-70"
+                className="group mt-2 flex w-full items-center justify-center gap-3 rounded-full py-3.5 text-[13px] font-bold text-white transition-all hover:scale-[1.03] active:scale-[0.97] disabled:opacity-70"
+                style={{ background: "linear-gradient(135deg, #5b93b8 0%, #3d7499 100%)", boxShadow: "0 6px 24px rgba(91,147,184,0.45)" }}
               >
                 {loading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -278,8 +289,8 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <p className="mt-6 text-center text-[10px] uppercase tracking-widest text-muted-foreground/40">
-          Chik Time @ 2026
+        <p className="mt-5 text-center text-[10px] uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.55)", textShadow: "0 1px 3px rgba(0,0,0,0.2)" }}>
+          Chik Time © 2026
         </p>
       </div>
 

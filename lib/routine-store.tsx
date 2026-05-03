@@ -75,6 +75,7 @@ function reducer(state: AppState, action: any): AppState {
     case "SET_SLOTS":
       return { ...state, slots: action.payload };
     case "SET_ACTIVE_SLOT":
+      if (!action.payload) return { ...state, activeSlotId: null, tasks: [], isLoadingTasks: false };
       return { ...state, activeSlotId: action.payload, view: "tasks", tasks: [], isLoadingTasks: true };
     case "RESET_TASKS_TO_DEFAULTS":
       return { ...state, tasks: cloneDefaultTasks(), activeSlotId: null, isLoadingTasks: false };
@@ -89,13 +90,15 @@ function reducer(state: AppState, action: any): AppState {
     case "START_ROUTINE": 
       return { ...state, view: "dashboard", isTimerRunning: true, activeTaskIndex: 0, elapsedSeconds: 0 };
     case "START_TIMER":
-      return { ...state, isTimerRunning: true };
+      return { ...state, isTimerRunning: true, view: "dashboard" };
     case "PAUSE_TIMER":
       return { ...state, isTimerRunning: false };
     case "RESET_TIMER":
       return { ...state, elapsedSeconds: 0, isTimerRunning: false };
     case "NEXT_TASK":
       return { ...state, activeTaskIndex: state.activeTaskIndex + 1, elapsedSeconds: 0 };
+    case "RESTART_ROUTINE":
+      return { ...state, activeTaskIndex: 0, elapsedSeconds: 0, isTimerRunning: false };
     case "TICK": 
       return { ...state, elapsedSeconds: state.elapsedSeconds + 1 };
     case "COMPLETE_ONBOARDING":
@@ -211,6 +214,9 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
   // טעינת משימות סלקטיבית
   useEffect(() => {
     if (!state.activeSlotId) return;                             // ← עצירה מוקדמת
+    if (!state.isLoadingTasks) return;                           // ← רק כשנדרשת טעינה
+
+    const slotIdToFetch = state.activeSlotId;
 
     const fetchTasks = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -220,15 +226,12 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      console.log("[fetchTasks] fetching for slot:", state.activeSlotId, "user:", user.id);
-
       const { data, error } = await supabase
         .from("tasks")
         .select("*")
         .eq("user_id", user.id)
-        .eq("time_slot_id", state.activeSlotId);
-
-      console.log("[fetchTasks] result:", { data, error });
+        .eq("time_slot_id", slotIdToFetch)
+        .order("position", { ascending: true, nullsFirst: false });
 
       if (error) {
         console.error("fetchTasks error:", error.message);
@@ -246,7 +249,7 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
       rawDispatch({ type: "SET_LOADING_TASKS", payload: false });
     };
     fetchTasks();
-  }, [state.activeSlotId]);
+  }, [state.activeSlotId, state.isLoadingTasks]);
 
   const dispatch = useCallback(async (action: any) => {
     rawDispatch(action);
@@ -262,13 +265,14 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
 
         const tasksToSync = currentState.tasks
           .filter((t) => t.enabled)
-          .map((t) => ({
+          .map((t, i) => ({
             user_id: user.id,
             task_id: String(t.id),
             name: t.name,
             icon: t.icon,
             duration: t.duration,
             enabled: true,
+            position: i,
             time_slot_id: currentState.activeSlotId || action.newSlotId || null,
           }));
 
@@ -309,13 +313,14 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        const tasksToSync = enabledTasksForNewSlot.map((t) => ({
+        const tasksToSync = enabledTasksForNewSlot.map((t, i) => ({
           user_id: user.id,
           task_id: crypto.randomUUID(),
           name: t.name,
           icon: t.icon,
           duration: t.duration,
           enabled: true,
+          position: i,
           time_slot_id: newSlotId,
         }));
 

@@ -64,7 +64,8 @@ const handleAddTask = async () => {
     duration: newTaskDuration,
     enabled: true,
     user_id: user.id,
-    time_slot_id: state.activeSlotId
+    time_slot_id: state.activeSlotId,
+    position: state.tasks.length
   }
 
   const { data, error } = await supabase
@@ -179,13 +180,34 @@ const handleDeleteTask = async (id: string) => {
     setDraggedIndex(null)
     setDragOverIndex(null)
     
-    // כאן כדאי להוסיף בעתיד עדכון של "סדר" ב-Database אם יש לך עמודת position
+    // שמירת הסדר החדש ב-Database
+    const savePositions = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      for (let i = 0; i < tasks.length; i++) {
+        await supabase
+          .from('tasks')
+          .update({ position: i })
+          .eq('task_id', tasks[i].id)
+          .eq('user_id', user.id)
+      }
+    }
+    savePositions()
   }
 
   const handleDragEnd = () => {
     setDraggedIndex(null)
     setDragOverIndex(null)
   }
+
+  const TASK_COLORS = [
+    { iconBg: "bg-blue-500/10",   iconText: "text-blue-400",   accent: "border-blue-400/30",   checkBg: "bg-blue-500/10 text-blue-400" },
+    { iconBg: "bg-indigo-500/10", iconText: "text-indigo-400", accent: "border-indigo-400/30", checkBg: "bg-indigo-500/10 text-indigo-400" },
+    { iconBg: "bg-sky-500/10",    iconText: "text-sky-400",    accent: "border-sky-400/30",    checkBg: "bg-sky-500/10 text-sky-400" },
+    { iconBg: "bg-teal-500/10",   iconText: "text-teal-400",   accent: "border-teal-400/30",   checkBg: "bg-teal-500/10 text-teal-400" },
+    { iconBg: "bg-violet-500/10", iconText: "text-violet-400", accent: "border-violet-400/30", checkBg: "bg-violet-500/10 text-violet-400" },
+    { iconBg: "bg-cyan-500/10",   iconText: "text-cyan-400",   accent: "border-cyan-400/30",   checkBg: "bg-cyan-500/10 text-cyan-400" },
+  ]
 
   if (state.isLoadingTasks) {
     return (
@@ -284,7 +306,9 @@ const handleDeleteTask = async (id: string) => {
 
       {/* Task List - JSX ללא שינוי */}
       <div className="flex flex-col gap-3">
-        {[...state.tasks].sort((a, b) => Number(b.enabled) - Number(a.enabled)).map((task, index) => (
+        {state.tasks.map((task, index) => {
+          const color = TASK_COLORS[index % TASK_COLORS.length]
+          return (
           <div
             key={task.id}
             draggable
@@ -293,7 +317,8 @@ const handleDeleteTask = async (id: string) => {
             onDrop={() => handleDrop(index)}
             onDragEnd={handleDragEnd}
             className={cn(
-              "neu-flat-sm rounded-2xl bg-background p-4 transition-all duration-200",
+              "neu-flat-sm rounded-2xl bg-background p-4 transition-all duration-200 border-l-4",
+              color.accent,
               draggedIndex === index && "opacity-50 scale-95",
               dragOverIndex === index && draggedIndex !== index && "ring-2 ring-primary/30",
               !task.enabled && "opacity-60"
@@ -306,7 +331,8 @@ const handleDeleteTask = async (id: string) => {
 
               <div className={cn(
                 "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
-                task.enabled ? "bg-primary/10 text-primary" : "bg-muted/50 text-muted-foreground"
+                task.enabled ? color.iconBg : "bg-muted/50",
+                task.enabled ? color.iconText : "text-muted-foreground"
               )}>
                 <TaskIcon iconKey={task.icon} className="h-5 w-5" strokeWidth={1.5} />
               </div>
@@ -360,7 +386,7 @@ const handleDeleteTask = async (id: string) => {
                 disabled={togglingIds.has(task.id)}
                 className={cn(
                   "flex h-8 w-8 items-center justify-center rounded-lg transition-all",
-                  task.enabled ? "bg-primary/15 text-primary" : "bg-muted/30 text-muted-foreground/40",
+                  task.enabled ? color.checkBg : "bg-muted/30 text-muted-foreground/40",
                   togglingIds.has(task.id) && "opacity-50 cursor-not-allowed"
                 )}
               >
@@ -391,8 +417,8 @@ const handleDeleteTask = async (id: string) => {
               </div>
             )}
           </div>
-          
-        ))}
+          )
+        })}
         {/* הוסיפי את זה בתחתית ה-div הראשי של ה-TaskManager */}
 <div className="mt-10 mb-6 flex justify-center">
   <button
@@ -400,7 +426,8 @@ const handleDeleteTask = async (id: string) => {
       dispatch({ type: "START_ROUTINE" });
       router.push("/active-timer");        // ← ניווט
     }}
-    className="neu-flat flex items-center gap-3 rounded-[30px] bg-primary px-12 py-5 text-white font-bold text-xl shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all"
+    className="neu-flat flex items-center gap-3 rounded-[30px] px-12 py-5 text-white font-bold text-xl hover:scale-[1.02] active:scale-[0.98] transition-all"
+    style={{ background: "linear-gradient(135deg, #5b93b8 0%, #3d7499 100%)", boxShadow: "0 8px 28px rgba(91,147,184,0.4)" }}
   >
     <Play className="h-6 w-6 fill-current" />
 בוא נתחיל  </button>

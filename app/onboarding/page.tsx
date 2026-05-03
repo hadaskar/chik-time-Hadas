@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useRoutine } from "@/lib/routine-store";
 import { TaskIcon, availableIcons } from "@/components/task-icon";
 import { Slider } from "@/components/ui/slider";
-import { ArrowRight, ArrowLeft, Clock, Check, Plus, Type } from "lucide-react";
+import { ArrowRight, ArrowLeft, Clock, Check, Plus, Type, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export default function OnboardingPage() {
@@ -20,6 +20,8 @@ export default function OnboardingPage() {
   const [newTaskDuration, setNewTaskDuration] = useState(10);
   const [showAllIcons, setShowAllIcons] = useState(false);
   const [justAdded, setJustAdded] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const steps = [
 
@@ -61,6 +63,29 @@ export default function OnboardingPage() {
     setStep(3);
   };
 
+  const handleDragStart = (index: number) => setDraggedIndex(index);
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  };
+  const handleDrop = (index: number) => {
+    if (draggedIndex === null || draggedIndex === index) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+    const tasks = [...state.tasks];
+    const [moved] = tasks.splice(draggedIndex, 1);
+    tasks.splice(index, 0, moved);
+    dispatch({ type: "REORDER_TASKS", payload: tasks });
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
   const saveNewSlotToDB = async () => {
     setSaving(true);
     try {
@@ -81,7 +106,7 @@ export default function OnboardingPage() {
       if (slotError) throw slotError;
 
       // 2. insert/upsert tasks
-      const tasksToSync = enabledTasks.map((task) => ({
+      const tasksToSync = enabledTasks.map((task, index) => ({
         user_id: user.id,
         time_slot_id: newSlot.id,
         task_id: crypto.randomUUID(),
@@ -89,6 +114,7 @@ export default function OnboardingPage() {
         icon: task.icon,
         duration: task.duration,
         enabled: true,
+        position: index,
       }));
       if (tasksToSync.length > 0) {
         const { error: tasksError } = await supabase
@@ -320,12 +346,24 @@ export default function OnboardingPage() {
             </div>
 
             <div className="flex flex-col gap-4">
-              {enabledTasks.map((task) => (
+              {enabledTasks.map((task, index) => (
                 <div
                   key={task.id}
-                  className="neu-flat rounded-2xl bg-background p-5"
+                  draggable
+                  onDragStart={() => handleDragStart(index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDrop={() => handleDrop(index)}
+                  onDragEnd={handleDragEnd}
+                  className={cn(
+                    "neu-flat rounded-2xl bg-background p-5 transition-all duration-200",
+                    draggedIndex === index && "opacity-50 scale-95",
+                    dragOverIndex === index && draggedIndex !== index && "ring-2 ring-primary/30"
+                  )}
                 >
                   <div className="mb-4 flex items-center gap-3">
+                    <div className="cursor-grab touch-none text-muted-foreground/40 active:cursor-grabbing">
+                      <GripVertical className="h-5 w-5" />
+                    </div>
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
                       <TaskIcon iconKey={task.icon} className="h-5 w-5" strokeWidth={1.5} />
                     </div>

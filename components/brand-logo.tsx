@@ -2,32 +2,36 @@
 
 import { ClockCheck } from "lucide-react"
 import { useTheme } from "next-themes"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 
 export function BrandLogo() {
   const { theme } = useTheme()
   const pathname = usePathname()
+  const router = useRouter()
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
   if (!mounted) return null
 
   // On pages with background images, always use light style
-  const forceLight = pathname === "/" || pathname === "/login"
+  const forceLight = pathname === "/" || pathname === "/login" || pathname === "/about"
   const isDark = !forceLight && theme === "dark"
 
   return (
-    <div className="fixed top-6 right-6 z-50 flex items-center gap-4 select-none pointer-events-none">
+    <div
+      className="fixed top-6 right-6 z-50 flex items-center gap-4 select-none cursor-pointer"
+      onClick={() => router.push("/about")}
+    >
       <div className="flex flex-col items-end gap-1">
         <span
           className="text-[15px] font-black uppercase tracking-[0.28em]"
-          style={{ color: isDark ? "rgba(111,163,199,0.85)" : "rgba(111,163,199,0.9)" }}
+          style={{ color: isDark ? "rgba(111,163,199,1)" : "rgba(60,110,150,1)" }}
         >
           Chik Time
         </span>
         <span
-          className="text-[10px] font-medium tracking-wide"
-          style={{ color: isDark ? "rgba(111,163,199,0.45)" : "rgba(111,163,199,0.55)" }}
+          className="text-[12px] font-semibold tracking-wide"
+          style={{ color: isDark ? "rgba(111,163,199,0.75)" : "rgba(60,110,150,0.85)" }}
         >
           ניהול זמן בצ׳יק
         </span>
@@ -44,7 +48,7 @@ export function BrandLogo() {
         <ClockCheck
           className="h-[26px] w-[26px]"
           strokeWidth={1.5}
-          style={{ color: isDark ? "rgba(111,163,199,0.8)" : "rgba(111,163,199,1)" }}
+          style={{ color: isDark ? "rgba(111,163,199,0.9)" : "rgba(60,110,150,1)" }}
         />
       </div>
     </div>
