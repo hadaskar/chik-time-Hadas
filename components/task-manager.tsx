@@ -426,11 +426,11 @@ const handleDeleteTask = async (id: string) => {
       dispatch({ type: "START_ROUTINE" });
       router.push("/active-timer");        // ← ניווט
     }}
-    className="neu-flat flex items-center gap-3 rounded-[30px] px-12 py-5 text-white font-bold text-xl hover:scale-[1.02] active:scale-[0.98] transition-all"
+    className="neu-flat flex items-center gap-1 rounded-full px-5 py-2 text-white font-bold text-xs hover:scale-[1.02] active:scale-[0.98] transition-all"
     style={{ background: "linear-gradient(135deg, #5b93b8 0%, #3d7499 100%)", boxShadow: "0 8px 28px rgba(91,147,184,0.4)" }}
   >
-    <Play className="h-6 w-6 fill-current" />
-בוא נתחיל  </button>
+    <Play className="h-3 w-3 fill-current" />
+התחל  </button>
 </div>
       </div>
 
