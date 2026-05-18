@@ -3,40 +3,22 @@ import React, { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { useRoutine } from "@/lib/routine-store"
 import { TaskIcon } from "@/components/task-icon"
-import { Check, SkipForward, Play, Pause, X, Coffee, RotateCcw } from "lucide-react"
+import { Check, SkipForward, Play, Pause, X, Coffee, RotateCcw, User } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
+import { useWakeLock } from "@/hooks/useWakeLock"
 
 export function ActiveTimer() {
   const { state, dispatch } = useRoutine()
+  const [isOnBreak, setIsOnBreak] = useState(false)
+
   const router = useRouter()
   const [firstName, setFirstName] = useState('')
   const dingRef = useRef<HTMLAudioElement | null>(null)
   const relaxRef = useRef<HTMLAudioElement | null>(null)
   const countdownRef = useRef<HTMLAudioElement | null>(null)
-  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
 
-  // Wake Lock — מונע מהמסך להיכבות ומהטאב להירדם
-  useEffect(() => {
-    const requestWakeLock = async () => {
-      try {
-        if ('wakeLock' in navigator) {
-          wakeLockRef.current = await navigator.wakeLock.request('screen')
-        }
-      } catch {}
-    }
-    requestWakeLock()
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') requestWakeLock()
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      wakeLockRef.current?.release().catch(() => {})
-    }
-  }, [])
+  useWakeLock(state.isTimerRunning && !isOnBreak)
 
   useEffect(() => {
     dingRef.current = new Audio('/ding.mp3')
@@ -70,49 +52,67 @@ export function ActiveTimer() {
     })
   }, [])
 
-  // --- Break state (local only, not saved to DB) ---
+  // --- Break state implemented with timestamp (real-time) ---
   const [breakMinutes, setBreakMinutes] = useState(0)       // 0 = no break
   const [showBreakPicker, setShowBreakPicker] = useState(false)
   const [customMinutes, setCustomMinutes] = useState("")
-  const [isOnBreak, setIsOnBreak] = useState(false)
-  const [breakRemaining, setBreakRemaining] = useState(0)    // seconds left in current break
-  const breakIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const [breakEndTimestampMs, setBreakEndTimestampMs] = useState<number | null>(null)
+  const [uiTick, setUiTick] = useState(0) // drives UI refresh
 
-  // Break countdown timer
+  // UI refresh while timer or break is active
   useEffect(() => {
-    if (isOnBreak && breakRemaining > 0) {
-      breakIntervalRef.current = setInterval(() => {
-        setBreakRemaining(prev => {
-          if (prev <= 1) {
-            clearInterval(breakIntervalRef.current!)
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }
-    return () => {
-      if (breakIntervalRef.current) clearInterval(breakIntervalRef.current)
-    }
-  }, [isOnBreak, breakRemaining > 0]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!state.isTimerRunning && !isOnBreak) return
+    const id = setInterval(() => setUiTick(t => t + 1), 500)
+    return () => clearInterval(id)
+  }, [state.isTimerRunning, isOnBreak])
 
-  // When break finishes (remaining hits 0), move to next task
+  // Derived elapsed seconds based on timestamp
+  const currentElapsedSeconds = state.isTimerRunning && state.taskStartTimestampMs
+    ? Math.floor((Date.now() - state.taskStartTimestampMs) / 1000)
+    : state.elapsedSeconds
+
+  // Derived current task / next task
+  const activeTasks = state.tasks.filter((t: any) => t.enabled)
+  const currentTask = activeTasks[state.activeTaskIndex]
+  const nextTask = activeTasks[state.activeTaskIndex + 1]
+
+  // Remaining seconds for current task (derived)
+  const totalSeconds = (currentTask?.duration || 0) * 60
+  const remainingSeconds = Math.max(0, totalSeconds - currentElapsedSeconds)
+
+  // Break remaining (derived from breakEndTimestampMs)
+  const breakRemainingSeconds = breakEndTimestampMs ? Math.max(0, Math.ceil((breakEndTimestampMs - Date.now()) / 1000)) : 0
+
+  // Countdown sound — play at last 3 seconds (derived)
   useEffect(() => {
-    if (isOnBreak && breakRemaining === 0) {
+    if (!state.isTimerRunning || isOnBreak || !currentTask) return
+    if (remainingSeconds === 3 && totalSeconds > 3) {
+      if (countdownRef.current) {
+        countdownRef.current.currentTime = 0
+        countdownRef.current.play().catch(() => {})
+      }
+    }
+  }, [remainingSeconds, state.isTimerRunning, isOnBreak, currentTask, totalSeconds, uiTick])
+
+  // When task reaches 0, complete it (derived)
+  useEffect(() => {
+    if (!state.isTimerRunning || isOnBreak || !currentTask) return
+    if (remainingSeconds === 0 && totalSeconds > 0) {
+      handleCompleteTask()
+    }
+  }, [remainingSeconds, state.isTimerRunning, isOnBreak, currentTask, totalSeconds]) // handleCompleteTask defined below
+
+  // Break finishing behavior (derived)
+  useEffect(() => {
+    if (!isOnBreak || !breakEndTimestampMs) return
+    if (breakRemainingSeconds === 0) {
       setIsOnBreak(false)
+      setBreakEndTimestampMs(null)
       dispatch({ type: "NEXT_TASK" })
       dispatch({ type: "START_TIMER" })
       playDing()
     }
-  }, [isOnBreak, breakRemaining]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fade out relax sound in last 5 seconds of break
-  useEffect(() => {
-    if (!isOnBreak || !relaxRef.current) return
-    if (breakRemaining <= 5 && breakRemaining > 0) {
-      relaxRef.current.volume = Math.max(0, (breakRemaining / 5) * 0.4)
-    }
-  }, [isOnBreak, breakRemaining])
+  }, [breakRemainingSeconds, isOnBreak, breakEndTimestampMs, dispatch])
 
   // Pre-unlock countdown audio on first user interaction
   const unlockCountdown = useCallback(() => {
@@ -130,9 +130,10 @@ export function ActiveTimer() {
   const handleCompleteTask = useCallback(() => {
     unlockCountdown()
     if (breakMinutes > 0) {
-      // Pause main timer, start break
+      // Pause main timer, start break (use timestamp)
       dispatch({ type: "PAUSE_TIMER" })
-      setBreakRemaining(breakMinutes * 60)
+      const end = Date.now() + breakMinutes * 60 * 1000
+      setBreakEndTimestampMs(end)
       setIsOnBreak(true)
       playRelax()
     } else {
@@ -142,9 +143,8 @@ export function ActiveTimer() {
   }, [breakMinutes, dispatch, unlockCountdown])
 
   const skipBreak = useCallback(() => {
-    if (breakIntervalRef.current) clearInterval(breakIntervalRef.current)
     setIsOnBreak(false)
-    setBreakRemaining(0)
+    setBreakEndTimestampMs(null)
     dispatch({ type: "NEXT_TASK" })
     dispatch({ type: "START_TIMER" })
     playDing()
@@ -164,48 +164,24 @@ export function ActiveTimer() {
   }
 
   const goToHomeSlots = () => {
-    if (breakIntervalRef.current) clearInterval(breakIntervalRef.current)
     setIsOnBreak(false)
+    setBreakEndTimestampMs(null)
     dispatch({ type: "SET_VIEW", payload: "slots" })
     router.push("/dashboard")
   }
-  
-  // מקבלים את רשימת המשימות הפעילות בלבד
-  const activeTasks = state.tasks.filter((t: any) => t.enabled)
-  const currentTask = activeTasks[state.activeTaskIndex]
-  const nextTask = activeTasks[state.activeTaskIndex + 1]
 
-  // חישוב זמן שנותר למשימה הנוכחית
-  const totalSeconds = (currentTask?.duration || 0) * 60
-  const remainingSeconds = Math.max(0, totalSeconds - state.elapsedSeconds)
-
-  // Countdown sound — play at last 3 seconds
-  useEffect(() => {
-    if (!state.isTimerRunning || isOnBreak || !currentTask) return
-    if (remainingSeconds === 3 && totalSeconds > 3) {
-      if (countdownRef.current) {
-        countdownRef.current.currentTime = 0
-        countdownRef.current.play().catch(() => {})
-      }
-    }
-  }, [remainingSeconds, state.isTimerRunning, isOnBreak, currentTask, totalSeconds])
-
-  // Auto-complete task when timer reaches 0
-  useEffect(() => {
-    if (!state.isTimerRunning || isOnBreak || !currentTask) return
-    if (remainingSeconds === 0 && totalSeconds > 0) {
-      handleCompleteTask()
-    }
-  }, [remainingSeconds, state.isTimerRunning, isOnBreak, currentTask, totalSeconds, handleCompleteTask])
-
-  // חישוב זמן כולל שנשאר לכל המשימות (כולל הפסקות)
+  // total remaining (includes derived breakRemainingSeconds)
   const remainingTasks = activeTasks.length - state.activeTaskIndex - 1
   const breaksTotalSeconds = breakMinutes > 0 ? remainingTasks * breakMinutes * 60 : 0
-  const totalRemainingSeconds = remainingSeconds +
-    activeTasks.slice(state.activeTaskIndex + 1).reduce((sum: number, t: any) => sum + t.duration * 60, 0) +
-    breaksTotalSeconds + (isOnBreak ? breakRemaining : 0)
+  const totalRemainingSeconds = remainingTasks >= 0
+    ? remainingTasks >= 0
+      ? remainingSeconds +
+        activeTasks.slice(state.activeTaskIndex + 1).reduce((sum: number, t: any) => sum + t.duration * 60, 0) +
+        breaksTotalSeconds + (isOnBreak ? breakRemainingSeconds : 0)
+      : 0
+    : 0
   const totalRemainingMins = Math.ceil(totalRemainingSeconds / 60)
-  
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60)
     const secs = seconds % 60
@@ -215,7 +191,9 @@ export function ActiveTimer() {
   if (!currentTask && !isOnBreak) {
     const totalTasks = activeTasks.length
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
+      <div className="flex min-h-screen flex-col items-center justify-center px-6" style={{
+        background: "linear-gradient(135deg, color-mix(in srgb, var(--background) 95%, #f3e8ff) 0%, var(--background) 50%, color-mix(in srgb, var(--background) 95%, #e0f2fe) 100%)"
+      }}>
         <div className="w-full max-w-sm">
 
           {/* Icon */}
@@ -235,7 +213,7 @@ export function ActiveTimer() {
           </div>
 
           {/* Stats */}
-          <div className="mb-8 neu-pressed rounded-[24px] bg-background p-5">
+          <div className="mb-8 neu-pressed rounded-[24px] bg-background p-5" style={{ background: "color-mix(in srgb, var(--background) 92%, #e9d5ff)" }}>
             <div className="flex items-center justify-around">
               <div className="text-center">
                 <p className="text-2xl font-black text-primary">{totalTasks}</p>
@@ -274,7 +252,9 @@ export function ActiveTimer() {
     const breakTotal = breakMinutes * 60
     const nextTaskForBreak = activeTasks[state.activeTaskIndex + 1]
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
+      <div className="flex min-h-screen flex-col items-center justify-center px-6" style={{
+        background: "linear-gradient(135deg, color-mix(in srgb, var(--background) 95%, #fef3c7) 0%, var(--background) 50%, color-mix(in srgb, var(--background) 95%, #e0f2fe) 100%)"
+      }}>
         <div className="w-full max-w-sm">
 
           {/* Break timer circle */}
@@ -283,14 +263,14 @@ export function ActiveTimer() {
               <div className="text-center">
                 <Coffee className="mx-auto mb-2 h-6 w-6 text-primary/50" />
                 <span className="text-4xl font-black text-foreground tabular-nums">
-                  {formatTime(breakRemaining)}
+                  {formatTime(breakRemainingSeconds)}
                 </span>
                 <p className="text-xs text-muted-foreground mt-1.5 font-medium">הפסקה</p>
               </div>
               <svg className="absolute inset-0 w-full h-full -rotate-90">
                 <circle cx="96" cy="96" r="88" fill="none" stroke="currentColor" strokeWidth="5" className="text-primary/10" />
                 <circle cx="96" cy="96" r="88" fill="none" stroke="currentColor" strokeWidth="5"
-                  strokeDasharray={553} strokeDashoffset={553 - (553 * (breakRemaining / (breakTotal || 1)))}
+                  strokeDasharray={553} strokeDashoffset={553 - (553 * (breakRemainingSeconds / (breakTotal || 1)))}
                   strokeLinecap="round" className="text-primary transition-all duration-1000" />
               </svg>
             </div>
@@ -318,28 +298,34 @@ export function ActiveTimer() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-background px-4">
+    <div className="flex min-h-screen flex-col items-center px-4" style={{
+      background: "linear-gradient(135deg, var(--background) 0%, color-mix(in srgb, var(--background) 95%, #e0f2fe) 50%, color-mix(in srgb, var(--background) 95%, #f3e8ff) 100%)"
+    }}>
       <div className="w-full max-w-sm">
 
       {/* ── Header ── */}
-      <div className="pt-8 pb-4">
-        {/* Top row: greeting + close */}
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground">
-              {firstName ? `היי ${firstName}` : 'היי'} 👋
-            </p>
-            <p className="text-lg font-black text-foreground">
-              {activeTasks.length} משימות
-            </p>
+      <div className="pt-8 pb-6 flex items-start justify-between">
+        <button
+          onClick={goToHomeSlots}
+          className="neu-flat-sm flex h-9 w-9 items-center justify-center rounded-xl bg-background text-muted-foreground transition-all hover:scale-[1.05] hover:text-primary active:neu-pressed active:scale-[0.95]"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      {/* User greeting and tasks count - right aligned */}
+      <div className="flex flex-col items-end mb-6 px-2">
+        <div className="flex items-center gap-2 mb-1">
+          <p className="text-lg font-black text-foreground">
+            {firstName || 'משתמש'} היי
+          </p>
+          <div className="neu-flat flex h-9 w-9 items-center justify-center rounded-full" style={{ background: "color-mix(in srgb, var(--background) 85%, #0284c7)" }}>
+            <User className="h-5 w-5" style={{ color: "var(--primary)" }} />
           </div>
-          <button
-            onClick={goToHomeSlots}
-            className="neu-flat-sm flex h-9 w-9 items-center justify-center rounded-xl bg-background text-muted-foreground transition-all hover:scale-[1.05] hover:text-primary active:neu-pressed active:scale-[0.95]"
-          >
-            <X className="h-4 w-4" />
-          </button>
         </div>
+        <p className="text-xl font-black text-primary tabular-nums">
+          {activeTasks.length} משימות
+        </p>
       </div>
       <div className="flex justify-center py-8">
         <div className="relative flex items-center justify-center w-56 h-56 rounded-full bg-background shadow-[8px_8px_20px_rgba(0,0,0,0.15),-6px_-6px_16px_rgba(255,255,255,0.06)]">
@@ -361,9 +347,9 @@ export function ActiveTimer() {
 
       {/* סה״כ נשאר + כפתור הפסקות */}
       <div className="mb-4 flex items-center justify-center gap-3">
-        <div className="neu-pressed flex items-center gap-2 rounded-full bg-background px-5 py-2">
-          <span className="text-xs text-muted-foreground">סה״כ נשאר</span>
-          <span className="text-sm font-black text-primary tabular-nums">{totalRemainingMins} דק׳</span>
+        <div className="neu-pressed flex items-center gap-2 rounded-full px-5 py-2" style={{ background: "color-mix(in srgb, var(--background) 90%, #bfdbfe)" }}>
+          <span className="text-sm text-muted-foreground">סה״כ נשאר</span>
+          <span className="text-2xl font-black text-primary tabular-nums">{totalRemainingMins} דק׳</span>
         </div>
         <button
           onClick={() => setShowBreakPicker(!showBreakPicker)}
@@ -379,7 +365,7 @@ export function ActiveTimer() {
 
       {/* Break picker */}
       {showBreakPicker && (
-        <div className="mb-4 neu-pressed rounded-[20px] bg-background p-4">
+        <div className="mb-4 neu-pressed rounded-[20px] p-4" style={{ background: "color-mix(in srgb, var(--background) 90%, #86efac)" }}>
           <p className="mb-3 text-center text-xs font-bold text-muted-foreground">הפסקה בין משימות</p>
           <div className="flex justify-center gap-2 mb-3">
             {[2, 5, 10].map(mins => (
@@ -397,26 +383,6 @@ export function ActiveTimer() {
               </button>
             ))}
           </div>
-          {/* Custom input */}
-          {/* <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min="1"
-              max="60"
-              placeholder="אחר..."
-              value={customMinutes}
-              onChange={e => setCustomMinutes(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && applyCustomBreak()}
-              className="neu-pressed flex-1 rounded-xl bg-background px-3 py-2 text-center text-sm text-foreground placeholder:text-muted-foreground/50 outline-none"
-            />
-            <button
-              onClick={applyCustomBreak}
-              className="neu-flat rounded-xl bg-background px-4 py-2 text-sm font-bold text-primary transition-all hover:scale-[1.03] active:neu-pressed"
-            >
-              הגדר
-            </button>
-          </div> */}
-          {/* Remove break option */}
           {breakMinutes > 0 && (
             <button
               onClick={() => selectBreak(0)}
@@ -429,7 +395,7 @@ export function ActiveTimer() {
       )}
 
       {/* 2. המשימה הנוכחית */}
-      <div className="neu-pressed p-5 rounded-[24px] bg-background mb-4">
+      <div className="neu-pressed p-5 rounded-[24px] mb-4" style={{ background: "color-mix(in srgb, var(--background) 92%, #86efac)" }}>
         <div className="flex items-center gap-4">
           <div className="neu-flat flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-background">
             <TaskIcon iconKey={currentTask.icon} className="w-6 h-6 text-primary" />
@@ -453,7 +419,6 @@ export function ActiveTimer() {
         )}
       </div>
 
-      
       {/* כפתורי שליטה */}
       <div className="flex justify-center gap-5 pb-8">
         <button
@@ -475,10 +440,11 @@ export function ActiveTimer() {
           <SkipForward className="w-6 h-6" />
         </button>
       </div>
-{/* 3. משימות הבאות */}
+
+      {/* 3. משימות הבאות */}
       <div className="mb-6">
         <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground/60">המשימות הבאות</p>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2" style={{ background: "color-mix(in srgb, var(--background) 93%, #fed7aa)", borderRadius: "18px", padding: "12px", marginLeft: "-8px", marginRight: "-8px" }}>
           {activeTasks.slice(state.activeTaskIndex + 1, state.activeTaskIndex + 4).map((task: any) => (
             <div key={task.id} className="neu-flat flex items-center gap-3 rounded-[18px] bg-background px-4 py-3 opacity-60">
               <TaskIcon iconKey={task.icon} className="w-4 h-4 text-muted-foreground" />

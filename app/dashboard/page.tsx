@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import TimeSlotCard from "@/components/TimeSlotCard";
 import { TaskManager } from "@/components/task-manager";
-import { Plus, ClockCheck, ArrowLeft, LogOut, Sparkles, Timer } from "lucide-react";
+import { Plus, ClockCheck, ArrowLeft, LogOut, Sparkles, Timer, User } from "lucide-react";
 import { useRoutine } from "@/lib/routine-store";
 
 interface Slot { id: string; name: string; time: number; progress: number }
@@ -165,9 +165,16 @@ export default function DashboardPage() {
 
           {/* Greeting */}
           <div className="pt-8 pb-14">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm font-medium text-foreground/60">{getGreeting(hour)}{firstName ? `, ${firstName}` : ""}</span>
-              <span className="text-base">👋</span>
+            <div className="flex items-end justify-end gap-3 mb-2">
+              <div className="text-right">
+                <p className="text-lg font-bold text-foreground">
+                  {firstName || 'משתמש'} היי
+                </p>
+                <p className="text-sm font-semibold text-muted-foreground">{getGreeting(hour)}</p>
+              </div>
+              <div className="neu-flat flex h-12 w-12 shrink-0 items-center justify-center rounded-full" style={{ background: "color-mix(in srgb, var(--background) 85%, #0284c7)" }}>
+                <User className="h-6 w-6" style={{ color: "var(--primary)" }} />
+              </div>
             </div>
             <h1 className="text-3xl font-black tracking-tight text-foreground leading-tight">
               הזמנים שלך

@@ -89,7 +89,7 @@ export default function AboutPage() {
             Chik<span style={{ color: "#6FA3C7" }}> Time</span>
           </h1>
 
-          {/* "TIME IS MANY" quote block */}
+          {/* "TIME IS MONEY" quote block */}
           <div
             className="mb-8 rounded-2xl px-7 py-5 max-w-sm"
             style={{
@@ -101,7 +101,7 @@ export default function AboutPage() {
               className="text-[13px] font-bold uppercase tracking-widest mb-1"
               style={{ color: "#6FA3C7" }}
             >
-              "TIME IS MANY"
+              "TIME IS MONEY"
             </p>
             <p className="text-sm leading-relaxed" style={{ color: "#636e72" }}>
               הזמן הוא המשאב היחיד שלא ניתן להחזיר.

@@ -37,6 +37,7 @@ export interface AppState {
   activeTaskIndex: number
   isTimerRunning: boolean
   elapsedSeconds: number
+  taskStartTimestampMs: number | null
   notifications: NotificationSettings
   wakeUpTime: string
   isNewUser: boolean
@@ -53,21 +54,22 @@ export const DEFAULT_TASKS: RoutineTask[] = [
 const cloneDefaultTasks = () => DEFAULT_TASKS.map((task) => ({ ...task }))
 
 const INITIAL_STATE: AppState = {
-  view: "onboarding",        // מתחילים ב-onboarding (שזה דף ה-Get Started)
-  onboardingComplete: false, // מסמנים שעדיין לא סיימנו
+  view: "onboarding",
+  onboardingComplete: false,
   tasks: cloneDefaultTasks(),
   slots: [],
   activeSlotId: null,
   activeTaskIndex: 0,
   isTimerRunning: false,
   elapsedSeconds: 0,
+  taskStartTimestampMs: null,
   notifications: { enabled: true, sound: "gentle-chime", reminderBefore: 30 },
   wakeUpTime: "07:00",
   isNewUser: true,
   isLoadingTasks: false
 }
 
-// --- 2. Reducer (כולל התמיכה ב-Slots) ---
+// --- Reducer (כולל התמיכה ב-Slots) ---
 function reducer(state: AppState, action: any): AppState {
   switch (action.type) {
     case "SET_VIEW": 
@@ -87,24 +89,52 @@ function reducer(state: AppState, action: any): AppState {
       return { ...state, wakeUpTime: action.payload };
     case "UPDATE_NOTIFICATIONS":
       return { ...state, notifications: { ...state.notifications, ...action.payload } };
+
+    // START_ROUTINE: start from task 0 and set real start timestamp
     case "START_ROUTINE": 
-      return { ...state, view: "dashboard", isTimerRunning: true, activeTaskIndex: 0, elapsedSeconds: 0 };
+      return { ...state, view: "dashboard", isTimerRunning: true, activeTaskIndex: 0, elapsedSeconds: 0, taskStartTimestampMs: Date.now() };
+
+    // START_TIMER: resume running; compute start timestamp so elapsedSeconds continues correctly
     case "START_TIMER":
-      return { ...state, isTimerRunning: true, view: "dashboard" };
-    case "PAUSE_TIMER":
-      return { ...state, isTimerRunning: false };
+      return {
+        ...state,
+        isTimerRunning: true,
+        view: "dashboard",
+        taskStartTimestampMs: Date.now() - state.elapsedSeconds * 1000
+      };
+
+    // PAUSE_TIMER: capture current elapsed from timestamp and clear it
+    case "PAUSE_TIMER": {
+      const now = Date.now()
+      const computedElapsed = state.taskStartTimestampMs ? Math.floor((now - state.taskStartTimestampMs) / 1000) : state.elapsedSeconds
+      return { ...state, isTimerRunning: false, elapsedSeconds: computedElapsed, taskStartTimestampMs: null };
+    }
+
     case "RESET_TIMER":
-      return { ...state, elapsedSeconds: 0, isTimerRunning: false };
+      return { ...state, elapsedSeconds: 0, isTimerRunning: false, taskStartTimestampMs: null };
+
+    // NEXT_TASK: advance index and reset elapsed; if still running, set new start timestamp
     case "NEXT_TASK":
-      return { ...state, activeTaskIndex: state.activeTaskIndex + 1, elapsedSeconds: 0 };
+      return {
+        ...state,
+        activeTaskIndex: state.activeTaskIndex + 1,
+        elapsedSeconds: 0,
+        taskStartTimestampMs: state.isTimerRunning ? Date.now() : null
+      };
+
     case "RESTART_ROUTINE":
-      return { ...state, activeTaskIndex: 0, elapsedSeconds: 0, isTimerRunning: false };
+      return { ...state, activeTaskIndex: 0, elapsedSeconds: 0, isTimerRunning: false, taskStartTimestampMs: null };
+
+    // TICK is kept but no longer authoritative for elapsedSeconds
     case "TICK": 
-      return { ...state, elapsedSeconds: state.elapsedSeconds + 1 };
+      return { ...state };
+
     case "COMPLETE_ONBOARDING":
-      return { ...state, onboardingComplete: true, view: "slots" }; // עובר לבחירת זמן
+      return { ...state, onboardingComplete: true, view: "slots" };
+
     case "REORDER_TASKS": 
       return { ...state, tasks: action.payload };
+
     case "ADD_TASK": {
       const lastEnabledIdx = state.tasks.map(t => t.enabled).lastIndexOf(true);
       const insertAt = lastEnabledIdx + 1;
@@ -126,40 +156,36 @@ function reducer(state: AppState, action: any): AppState {
         ...state,
         tasks: state.tasks.map((t) => t.id === action.payload ? { ...t, enabled: !t.enabled } : t),
       };
-      case "COMPLETE_WELCOME":
-  return {
-    ...state,
-    view: "slots", // עובר לדף הבית (השמש והשגרות)
-    onboardingComplete: true // מסמן שראינו את דף הפתיחה
-  };
-      // כאן את מדביקה את הקוד החדש:
-  case "CREATE_AND_START_SLOT":
-    const enabledTasksForNewSlot = state.tasks.filter(t => t.enabled);
-    const newSlotId = Math.random().toString(36).substr(2, 9);
-    
-    const createdSlot = {
-      id: newSlotId,
-      name: "שגרה חדשה", 
-      tasks: [{ count: enabledTasksForNewSlot.length }]
-    };
+    case "CREATE_AND_START_SLOT":
+      {
+        const enabledTasksForNewSlot = state.tasks.filter((t) => t.enabled);
+        const newSlotId = Math.random().toString(36).substr(2, 9);
 
-    return {
-      ...state,
-      slots: [...state.slots, createdSlot],
-      activeSlotId: newSlotId,
-      activeTaskIndex: 0,
-      elapsedSeconds: 0,
-      isTimerRunning: true,
-      onboardingComplete: true,
-view: "slots"    };
-      case "RESET_ONBOARDING_TASKS":
-  return {
-    ...state,
-    // הופך את כל המשימות ללא פעילות כדי להתחיל "דף חלק" ב-Onboarding
-    tasks: state.tasks.map(t => ({ ...t, enabled: false })),
-    onboardingComplete: false,
-    view: "onboarding"
-  };
+        const createdSlot = {
+          id: newSlotId,
+          name: "שגרה חדשה", 
+          tasks: [{ count: enabledTasksForNewSlot.length }]
+        };
+
+        return {
+          ...state,
+          slots: [...state.slots, createdSlot],
+          activeSlotId: newSlotId,
+          activeTaskIndex: 0,
+          elapsedSeconds: 0,
+          isTimerRunning: true,
+          onboardingComplete: true,
+          view: "slots",
+          taskStartTimestampMs: Date.now()
+        };
+      }
+    case "RESET_ONBOARDING_TASKS":
+      return {
+        ...state,
+        tasks: state.tasks.map(t => ({ ...t, enabled: false })),
+        onboardingComplete: false,
+        view: "onboarding"
+      };
     case "UPDATE_TASK_DURATION":
       return {
         ...state,
@@ -186,18 +212,9 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
   const stateRef = React.useRef(state)
   useEffect(() => { stateRef.current = state }, [state])
 
-  // טיימר
-  useEffect(() => {
-    let interval: NodeJS.Timeout
-    if (state.isTimerRunning && state.view === "dashboard") { 
-      interval = setInterval(() => {
-        rawDispatch({ type: "TICK" })
-      }, 1000)
-    }
-    return () => clearInterval(interval)
-  }, [state.isTimerRunning, state.view])
+  // NOTE: removed authoritative ticking effect (elapsedSeconds is derived from timestamps now)
+  // Keep fetchSlots and fetchTasks effects as before
 
-  // טעינת זמנים (Slots)
   useEffect(() => {
     const fetchSlots = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -211,10 +228,9 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
     fetchSlots();
   }, []);
 
-  // טעינת משימות סלקטיבית
   useEffect(() => {
-    if (!state.activeSlotId) return;                             // ← עצירה מוקדמת
-    if (!state.isLoadingTasks) return;                           // ← רק כשנדרשת טעינה
+    if (!state.activeSlotId) return;
+    if (!state.isLoadingTasks) return;
 
     const slotIdToFetch = state.activeSlotId;
 
@@ -255,7 +271,7 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
     rawDispatch(action);
     const currentState = stateRef.current;
 
-    // סינכרון משימות רגיל (עכשיו כולל time_slot_id ב‑onConflict)
+    // Sync tasks on START_ROUTINE (same as before)
     if (
       action.type === "START_ROUTINE"
     ) {
@@ -288,7 +304,6 @@ export function RoutineProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // 🌟 ניהול יצירת slot חדש + ניווט
     if (action.type === "CREATE_AND_START_SLOT") {
       try {
         const { data: { user } } = await supabase.auth.getUser();
